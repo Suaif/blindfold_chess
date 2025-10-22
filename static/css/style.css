@@ -1,0 +1,394 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    color: #333;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 30px;
+    color: white;
+}
+
+.header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.header p {
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+.main-content {
+    display: grid;
+    grid-template-columns: 1fr 300px 450px;
+    gap: 20px;
+    flex: 1;
+    min-height: 600px;
+}
+
+.panel {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+}
+
+.panel h3 {
+    margin-bottom: 15px;
+    color: #4a5568;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 10px;
+}
+
+/* Chessboard Panel */
+.chessboard-panel {
+    align-items: center;
+    justify-content: center;
+}
+
+#chessboard {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+/* Move List Panel */
+.move-list-panel {
+    min-height: 400px;
+}
+
+.move-list {
+    height: 500px; /* fixed height */
+    overflow-y: auto;
+    padding: 10px;
+    background: #f7fafc;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.move-item {
+    padding: 4px 8px;
+    margin: 2px 0;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.move-item:hover {
+    background-color: #e2e8f0;
+}
+
+.move-number {
+    font-weight: bold;
+    color: #4a5568;
+    margin-right: 8px;
+}
+
+/* Chat Panel */
+.chat-panel {
+    min-height: 400px;
+}
+
+.chat-messages {
+    overflow-y: auto;
+    padding: 10px;
+    background: #f7fafc;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    height: 500px; /* fixed height */
+}
+
+.chat-message {
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    max-width: 90%;
+}
+
+.chat-message.user {
+    background: #3182ce;
+    color: white;
+    margin-left: auto;
+    text-align: right;
+}
+
+.chat-message.assistant {
+    background: #e2e8f0;
+    color: #2d3748;
+}
+
+.chat-input-container {
+    display: flex;
+    gap: 10px;
+}
+
+.chat-input {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.chat-input:focus {
+    border-color: #3182ce;
+}
+
+.send-button {
+    padding: 10px 20px;
+    background: #3182ce;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.send-button:hover {
+    background: #2c5282;
+}
+
+/* Setup Screen */
+.setup-screen {
+    background: white;
+    border-radius: 15px;
+    padding: 40px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    max-width: 500px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.setup-screen h2 {
+    margin-bottom: 30px;
+    color: #2d3748;
+}
+
+.setup-group {
+    margin-bottom: 25px;
+    text-align: left;
+}
+
+.setup-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #4a5568;
+}
+
+.color-selector {
+    display: flex;
+    gap: 10px;
+}
+
+.color-option {
+    flex: 1;
+    padding: 15px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.color-option:hover {
+    border-color: #3182ce;
+    background: #ebf8ff;
+}
+
+.color-option.selected {
+    border-color: #3182ce;
+    background: #3182ce;
+    color: white;
+}
+
+.elo-slider {
+    width: 100%;
+    margin: 10px 0;
+}
+
+.elo-display {
+    text-align: center;
+    font-weight: bold;
+    color: #3182ce;
+    margin-top: 5px;
+}
+
+.start-button {
+    width: 100%;
+    padding: 15px;
+    background: #38a169;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.start-button:hover {
+    background: #2f855a;
+}
+
+.start-button:disabled {
+    background: #a0aec0;
+    cursor: not-allowed;
+}
+
+/* Game Controls */
+.game-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f7fafc;
+    border-radius: 8px;
+    justify-content: center;
+}
+
+.game-controls p {
+    color: black;
+    font-weight: bold;
+    font-size: 18px; /* adjust size as needed */
+    margin-bottom: 10px; /* creates the jump line/space before buttons */
+}
+.control-button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.reset-button {
+    background: #e53e3e;
+    color: white;
+}
+
+.reset-button:hover {
+    background: #c53030;
+}
+
+.new-game-button {
+    background: #38a169;
+    color: white;
+}
+
+.new-game-button:hover {
+    background: #2f855a;
+}
+
+/* Status Messages */
+.status-message {
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.status-success {
+    background: #c6f6d5;
+    color: #22543d;
+    border: 1px solid #9ae6b4;
+}
+
+.status-error {
+    background: #fed7d7;
+    color: #742a2a;
+    border: 1px solid #fc8181;
+}
+
+.status-info {
+    background: #bee3f8;
+    color: #2c5282;
+    border: 1px solid #63b3ed;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .main-content {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .panel {
+        min-height: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .header h1 {
+        font-size: 2rem;
+    }
+    
+    .setup-screen {
+        padding: 20px;
+    }
+    
+    .color-selector {
+        flex-direction: column;
+    }
+}
+
+/* Chessboard.js styling */
+.chessboard-63f37 {
+    border: 3px solid #4a5568;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.highlight1-32417, .highlight2-9c5d2 {
+    box-shadow: inset 0 0 0 4px rgba(255, 255, 0, 0.4);
+}
+
+/* Loading spinner */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3182ce;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.hidden {
+    display: none !important;
+}
