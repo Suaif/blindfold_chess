@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from chat_assistant import ChatAssistant
 
-STOCKFISH_PATH = r"C:\Users\ismas\projects\chess_blindfold\assets\stockfish\stockfish-windows-x86-64-avx2.exe"
+STOCKFISH_PATH = r"C:\Users\ismas\projects\blindfold_chess\assets\stockfish\stockfish-windows-x86-64-avx2.exe"
 
 app = FastAPI(title="Blindfold Chess Training", version="1.0.0")
 

@@ -73,6 +73,44 @@ body {
     margin: 0 auto;
 }
 
+/* Manual move input under the board */
+.manual-move-input {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+    width: 100%;
+    max-width: 500px;
+}
+
+.manual-move-text {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.manual-move-text:focus {
+    border-color: #3182ce;
+}
+
+.manual-move-button {
+    padding: 10px 16px;
+    background: #4a5568;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.manual-move-button:hover {
+    background: #2d3748;
+}
+
 /* Move List Panel */
 .move-list-panel {
     min-height: 400px;
@@ -391,4 +429,41 @@ body {
 
 .hidden {
     display: none !important;
+}
+
+/* Piece visibility toggle styling */
+.board-controls-top,
+.board-controls-right {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
+}
+
+.piece-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #2d3748;
+    cursor: pointer;
+}
+
+.piece-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* Hide chess pieces by targeting the chessboard image pieces inserted by Chessboard.js */
+/* chessboard.js may render pieces as <img class="piece"> or as divs with background-image
+   (depending on version). Cover both cases and inline styles. */
+#chessboard.pieces-hidden img.piece,
+#chessboard.pieces-hidden .piece,
+#chessboard.pieces-hidden .square-55d63 .piece,
+#chessboard.pieces-hidden .square-55d63 img,
+#chessboard.pieces-hidden .chessboard-ctn img,
+#chessboard.pieces-hidden [style*="background-image"] {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    background-image: none !important;
 }

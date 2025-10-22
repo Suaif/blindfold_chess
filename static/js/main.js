@@ -8,6 +8,7 @@ class BlindfoldChessApp {
         this.playerColor = 'white';
         this.engineElo = 1350;
         this.testAnswer = null;
+        this.piecesVisible = true; // track piece visibility
         
         this.initializeApp();
     }
@@ -73,6 +74,7 @@ class BlindfoldChessApp {
                 this.updateBoard(message.fen);
                 this.updateMoveList(message.move_history);
                 this.updatePositionStats(message);
+                this.updateGameControls();
                 break;
                 
             case 'invalid_move':
@@ -188,11 +190,27 @@ class BlindfoldChessApp {
                 
                 <div class="main-content">
                     <div class="panel chessboard-panel">
+                        <div class="board-controls-top">
+                            <label class="piece-toggle">
+                                <input type="checkbox" id="piecesToggleTop" ${this.piecesVisible ? 'checked' : ''}>
+                                <span>Show pieces</span>
+                            </label>
+                        </div>
                         <h3>Chessboard</h3>
                         <div id="chessboard"></div>
+                        <div class="manual-move-input">
+                            <input type="text" id="manualMoveInput" class="manual-move-text" placeholder="Type your move (e.g., e2e4, Nf3, O-O, e8=Q)">
+                            <button id="manualMoveButton" class="manual-move-button">Play</button>
+                        </div>
                     </div>
                     
                     <div class="panel move-list-panel">
+                        <div class="board-controls-right">
+                            <label class="piece-toggle">
+                                <input type="checkbox" id="piecesToggleRight" ${this.piecesVisible ? 'checked' : ''}>
+                                <span>Show pieces</span>
+                            </label>
+                        </div>
                         <h3>Move History</h3>
                         <div class="move-list" id="moveList"></div>
                     </div>
@@ -244,6 +262,37 @@ class BlindfoldChessApp {
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 sendMessage();
+            }
+        });
+
+        // Piece visibility toggles (top and right) - keep them synchronized
+        const topToggle = document.getElementById('piecesToggleTop');
+        const rightToggle = document.getElementById('piecesToggleRight');
+
+        const toggleHandler = (e) => {
+            const visible = !!e.target.checked;
+            this.togglePieces(visible);
+        };
+
+        if (topToggle) topToggle.addEventListener('change', toggleHandler);
+        if (rightToggle) rightToggle.addEventListener('change', toggleHandler);
+
+        // Ensure both toggles reflect the current state
+        if (topToggle) topToggle.checked = this.piecesVisible;
+        if (rightToggle) rightToggle.checked = this.piecesVisible;
+
+        // Manual move input
+        const manualInput = document.getElementById('manualMoveInput');
+        const manualButton = document.getElementById('manualMoveButton');
+        const submitManual = () => {
+            const mv = manualInput.value.trim();
+            if (!mv) return;
+            this.submitManualMove(mv);
+        };
+        if (manualButton) manualButton.addEventListener('click', submitManual);
+        if (manualInput) manualInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                submitManual();
             }
         });
     }
@@ -343,6 +392,31 @@ class BlindfoldChessApp {
         };
         
         this.board = new Chessboard('chessboard', config);
+
+        // Apply visibility immediately after the board is created
+        this.applyPieceVisibility();
+    }
+
+    // Toggle piece visibility and sync checkboxes
+    togglePieces(visible) {
+        this.piecesVisible = visible;
+        this.applyPieceVisibility();
+
+        const topToggle = document.getElementById('piecesToggleTop');
+        const rightToggle = document.getElementById('piecesToggleRight');
+        if (topToggle) topToggle.checked = visible;
+        if (rightToggle) rightToggle.checked = visible;
+    }
+
+    // Apply CSS class to hide/show piece images
+    applyPieceVisibility() {
+        const boardEl = document.getElementById('chessboard');
+        if (!boardEl) return;
+        if (this.piecesVisible) {
+            boardEl.classList.remove('pieces-hidden');
+        } else {
+            boardEl.classList.add('pieces-hidden');
+        }
     }
     
     updateBoard(fen) {
@@ -351,6 +425,92 @@ class BlindfoldChessApp {
         }
         if (this.game) {
             this.game.load(fen);
+        }
+        // Re-apply visibility in case the board library re-renders pieces
+        this.applyPieceVisibility();
+        // Update UI controls like manual input availability
+        this.updateGameControls();
+    }
+
+    // Submit a move typed by the user (SAN or coordinate). Validates and sends to server.
+    submitManualMove(moveText) {
+        if (!this.gameActive) {
+            return this.showStatusMessage('No active game. Start a new game first.', 'error');
+        }
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            return this.showStatusMessage('Not connected. Please wait for connection.', 'error');
+        }
+
+        // Ensure it's player's turn
+        const turn = this.game ? this.game.turn() : null;
+        const playerTurn = (this.playerColor === 'white' ? 'w' : 'b');
+        if (turn !== playerTurn) {
+            return this.showStatusMessage("It's not your turn yet.", 'info');
+        }
+
+        // Try parse to UCI using chess.js (SAN) or regex (coordinate)
+        const uci = this.parseMoveToUCI(moveText);
+        if (!uci) {
+            return this.showStatusMessage('Invalid move format. Try e2e4, Nf3, O-O, or e8=Q.', 'error');
+        }
+
+        const from = uci.slice(0, 2);
+        const to = uci.slice(2, 4);
+        const promo = uci.length > 4 ? uci.slice(4) : undefined;
+
+        // Validate on local game
+        const moveObj = { from, to };
+        if (promo) moveObj.promotion = promo;
+        const applied = this.game.move(moveObj);
+        if (!applied) {
+            return this.showStatusMessage('Illegal move in current position.', 'error');
+        }
+
+        // Reflect on board immediately
+        if (this.board) {
+            this.board.position(this.game.fen());
+            this.applyPieceVisibility();
+        }
+
+        // Send to server
+        this.ws.send(JSON.stringify({
+            type: 'move',
+            move: from + to + (promo || '')
+        }));
+
+        // Clear input
+        const manualInput = document.getElementById('manualMoveInput');
+        if (manualInput) manualInput.value = '';
+    }
+
+    // Convert a typed move to UCI (e2e4, or from SAN like Nf3 / O-O / e8=Q)
+    parseMoveToUCI(moveText) {
+        const text = moveText.trim();
+        if (!text) return null;
+
+        // Coordinate format like e2e4 or e7e8q
+        const coord = text.toLowerCase().replace(/\s+/g, '');
+        const m = coord.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/);
+        if (m) {
+            const from = m[1];
+            const to = m[2];
+            const promo = m[3] || '';
+            // Optionally, validate with a temp game
+            const tmp = new Chess(this.game.fen());
+            const ok = tmp.move({ from, to, promotion: promo || undefined });
+            if (!ok) return null;
+            return from + to + promo;
+        }
+
+        // Else try SAN via chess.js with sloppy parsing
+        try {
+            const tmp = new Chess(this.game.fen());
+            const mv = tmp.move(text, { sloppy: true });
+            if (!mv) return null;
+            const promo = mv.promotion ? mv.promotion : '';
+            return mv.from + mv.to + promo;
+        } catch (e) {
+            return null;
         }
     }
     
@@ -446,7 +606,28 @@ class BlindfoldChessApp {
     }
     
     updateGameControls() {
-        // Update any game control elements if needed
+        // Enable/disable the manual move input depending on state
+        const manualInput = document.getElementById('manualMoveInput');
+        const manualButton = document.getElementById('manualMoveButton');
+        if (!manualInput || !manualButton) return;
+
+        const connected = !!(this.ws && this.ws.readyState === WebSocket.OPEN);
+        const isActive = !!this.gameActive;
+        const playerTurn = this.game ? (this.game.turn() === (this.playerColor === 'white' ? 'w' : 'b')) : false;
+        const enabled = connected && isActive && playerTurn;
+
+        manualInput.disabled = !enabled;
+        manualButton.disabled = !enabled;
+
+        if (!isActive) {
+            manualInput.placeholder = 'Start a game to enter moves';
+        } else if (!connected) {
+            manualInput.placeholder = 'Connecting...';
+        } else if (!playerTurn) {
+            manualInput.placeholder = "Waiting for opponent's move";
+        } else {
+            manualInput.placeholder = 'Type your move (e.g., e2e4, Nf3, O-O)';
+        }
     }
 }
 
