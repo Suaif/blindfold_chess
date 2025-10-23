@@ -210,9 +210,11 @@ class BlindfoldChessApp {
                             <button id="manualMoveButton" class="manual-move-button">Play</button>
                         </div>
                         <div class="voice-controls-row">
-                            <select id="voiceModelSelect" class="voice-model-select" title="Choose Vosk model">
-                                <option value="large">Vosk Large (en-us-0.22)</option>
-                                <option value="small">Vosk Small (small-en-us-0.15)</option>
+                            <select id="voiceModelSelect" class="voice-model-select" title="Choose STT backend and model">
+                                <option value="vosk.large">Vosk Large (en-us-0.22)</option>
+                                <option value="vosk.small">Vosk Small (small-en-us-0.15)</option>
+                                <option value="whisper.small" selected>Whisper Small (CUDA if available)</option>
+                                <option value="whisper.medium">Whisper Medium (CUDA if available)</option>
                             </select>
                             <button id="voiceMoveButton" class="voice-move-button" title="Record / Stop">🎤 Record</button>
                             <input type="text" id="voiceText" class="voice-text" placeholder="Recognition output..." readonly>
@@ -420,7 +422,7 @@ class BlindfoldChessApp {
     }
 
     // Submit a move typed by the user (SAN or coordinate). Validates and sends to server.
-    submitManualMove(moveText) {
+    submitManualMove(moveText, source = 'manual') {
         if (!this.gameActive) {
             return this.showStatusMessage('No active game. Start a new game first.', 'error');
         }
@@ -450,7 +452,8 @@ class BlindfoldChessApp {
         if (promo) moveObj.promotion = promo;
         const applied = this.game.move(moveObj);
         if (!applied) {
-            return this.showStatusMessage('Illegal move in current position.', 'error');
+            console.log(`❌ Move not applied: ${moveText} (${uci}) - Illegal move or not recognized`);
+            return this.showStatusMessage('Illegal move or not recognized.', 'error');
         }
 
         // Reflect on board immediately
@@ -459,10 +462,11 @@ class BlindfoldChessApp {
             this.applyPieceVisibility();
         }
 
-        // Send to server
+        // Send to server with source information
         this.ws.send(JSON.stringify({
             type: 'move',
-            move: from + to + (promo || '')
+            move: from + to + (promo || ''),
+            source: source
         }));
 
         // Clear input
@@ -734,12 +738,12 @@ class BlindfoldChessApp {
 
             const form = new FormData();
             form.append('audio', wavBlob, 'speech.wav');
-            form.append('backend', 'vosk');
-            // include selected model hint for server (auto/large/small)
+            // Parse backend+model from selector value (e.g., 'vosk.large' or 'whisper.small')
             const voiceModelSelect = document.getElementById('voiceModelSelect');
-            // Map selection to small/large
-            const modelChoice = voiceModelSelect ? voiceModelSelect.value : 'large';
-            form.append('model', modelChoice);
+            const sel = voiceModelSelect ? (voiceModelSelect.value || 'whisper.small') : 'whisper.small';
+            const [backend, model] = sel.includes('.') ? sel.split('.') : ['whisper', 'small'];
+            form.append('backend', backend);
+            form.append('model', model);
             const res = await fetch('/stt', { method: 'POST', body: form });
             if (!res.ok) throw new Error('STT request failed');
             const data = await res.json();
@@ -759,15 +763,33 @@ class BlindfoldChessApp {
         const voiceText = document.getElementById('voiceText');
         if (voiceText) voiceText.value = text;
 
+        console.log(`🎤 Voice input: "${text}"`);
         const candidates = normalizeSpeechToCandidates(text);
+        console.log(`   Generated candidates: [${candidates.join(', ')}]`);
+        
         for (const cand of candidates) {
             const ok = this.parseMoveToUCI(cand);
             if (ok) {
-                // submit through existing path
-                this.submitManualMove(cand);
+                console.log(`   ✅ Match found: "${cand}" → UCI: ${ok}`);
+                
+                // submit through existing path with 'voice' source
+                this.submitManualMove(cand, 'voice');
                 return;
             }
         }
+        console.log(`   ❌ No valid move found`);
+        
+        // Send failure log to server
+        fetch('/log_voice', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                transcription: text,
+                candidates: candidates,
+                success: false
+            })
+        }).catch(() => {}); // Ignore errors
+        
         this.showStatusMessage('Could not parse spoken move. Try again or type it.', 'error');
     }
 

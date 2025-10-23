@@ -1,5 +1,9 @@
 test.ipynb
+test_whisper.py
 TODO.txt
 __pycache__
 assets/
-moves.wav
+moves/
+context.md
+STT_ARCHITECTURE.md
+STT_REFACTORING_SUMMARY.md

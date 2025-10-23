@@ -62,40 +62,59 @@ The application UI will now be available at **http://localhost:8000**
 
 ## Voice Input (Speak Your Move)
 
-You can enter moves by voice using two backends:
+You can enter moves by voice using these backends:
 
 1) Browser (Web Speech API)
 - Works in Chrome/Edge with built-in speech recognition.
-- No server setup required. Select "Browser" in the dropdown next to the Speak button.
+- No server setup required.
 
 2) Local Vosk (Offline)
-- Runs entirely on your machine. Requires a one-time model download.
+- Runs entirely on your CPU. Smaller model is faster; large model is more accurate.
 
-Setup steps for Vosk (offline):
-- Install the Python package (already in requirements):
+3) Local Whisper via Faster-Whisper (GPU if available)
+- High-quality transcription, uses your NVIDIA GPU if present (RTX 4060 recommended).
+- Falls back to CPU with int8 compute for portability.
+
+### Setup steps
+
+- Install Python packages:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-- Download a small English model (about ~50MB), e.g.:
-   - https://alphacephei.com/vosk/models (choose "vosk-model-small-en-us-0.15")
-
-- Unzip the folder so it exists at:
+- Vosk models:
+   - Large (en-us-0.22) and Small (en-us-0.15) model directories are expected under `assets/speech_to_text/`.
+   - If missing, download from https://alphacephei.com/vosk/models and place the folders under:
 
 ```
-static/models/vosk-model-small-en-us-0.15
+assets/speech_to_text/vosk-model-en-us-0.22
+assets/speech_to_text/vosk-model-small-en-us-0.15
 ```
 
-- Start the app again. In the UI, pick "Local Vosk" from the dropdown and click Speak.
+- Whisper models (Faster-Whisper):
+   - Small and Medium English models are referenced under:
 
-Notes
-- The browser records a short utterance, encodes a mono 16kHz WAV, and sends it to /stt for transcription via Vosk.
-- If the model folder is missing, the server will return a helpful error.
-- Spoken phrases like "e two e four", "castle king side", "knight f three", or "e seven e eight queen" are normalized to legal chess moves.
+```
+assets/speech_to_text/models--guillaumekln--faster-whisper-small.en/...
+assets/speech_to_text/models--guillaumekln--faster-whisper-medium.en/...
+```
 
-Whisper (optional, future)
-- The voice backend is modular. Server-side code is now in `stt.py` with a simple function `transcribe_wav_bytes(...)` so we can plug in other engines easily. A Whisper-based backend can be added by implementing a Whisper branch in `transcribe_wav_bytes()` (or a dedicated `transcribe_wav_bytes_whisper()` helper) and selecting it in the UI.
+   - If missing, you can obtain them via Hugging Face (guillaumekln/faster-whisper-*) and place them under the paths above.
+
+### Using in the UI
+
+- In the voice controls next to the Record button, pick one of:
+   - Vosk Large (en-us-0.22)
+   - Vosk Small (small-en-us-0.15)
+   - Whisper Small (CUDA if available)
+   - Whisper Medium (CUDA if available)
+
+When you click Record, the browser captures a short utterance, encodes a mono 16 kHz WAV, and sends it to the `/stt` endpoint. The server performs transcription with the selected backend and returns text. Spoken phrases like "e two e four", "castle king side", "knight f three", or "e seven e eight queen" are normalized to legal chess moves.
+
+Troubleshooting
+- If you select Whisper and see an error, ensure `faster-whisper` is installed (it is listed in `requirements.txt`).
+- GPU usage: the app auto-detects CUDA via `ctranslate2`. If unavailable, it will run on CPU.
 
 ## Code Organization
 

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 import os
 from chat_assistant import ChatAssistant
-from stt import transcribe_wav_bytes, STTError
+from stt import create_transcriber, STTError, AudioTranscriber
 
 STOCKFISH_PATH = r"C:\Users\ismas\projects\blindfold_chess\assets\stockfish\stockfish-windows-x86-64-avx2.exe"
 
@@ -119,6 +119,26 @@ manager = ConnectionManager()
 
 chat_assistant = ChatAssistant()
 
+# Cache transcriber instances for reuse across requests
+transcriber_cache: Dict[str, AudioTranscriber] = {}
+
+
+def get_transcriber(backend: str = "vosk", model: str = "auto") -> AudioTranscriber:
+    """Get or create a cached transcriber instance.
+    
+    Args:
+        backend: Backend to use ("vosk" or "whisper").
+        model: Model hint for the backend.
+        
+    Returns:
+        Cached or newly created AudioTranscriber instance.
+    """
+    cache_key = f"{backend}:{model}"
+    if cache_key not in transcriber_cache:
+        transcriber_cache[cache_key] = create_transcriber(backend=backend, model=model)
+    return transcriber_cache[cache_key]
+
+
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
     return """
@@ -199,9 +219,11 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
                 
                 move_uci = data.get("move")
+                source = data.get("source", "manual")  # Track if move is from voice or manual input
                 success, result = game_state.make_move(move_uci)
                 
                 if success:
+                    print(f"✅ -  Move played: {move_uci} → {result}")
                     # Check if game is over
                     if game_state.board.is_game_over():
                         # First send final position so client sees the mating move
@@ -248,6 +270,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "move_history": game_state.move_history,
                     })
                 else:
+                    print(f"✗ - Invalid move: {move_uci} → {result}")
                     await manager.broadcast_to_client(websocket, {
                         "type": "invalid_move",
                         "message": result
@@ -276,7 +299,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.post("/stt")
 async def stt_endpoint(audio: UploadFile = File(...), backend: str = Form("vosk"), model: str = Form("auto")):
-    """Transcribe a short utterance. Default backend uses local Vosk model.
+    """Transcribe a short utterance.
+
+    - Backends: "vosk" (offline), "whisper" (faster-whisper; CUDA if available)
+    - Model hints:
+        - Vosk: "auto" | "small" | "large"
+        - Whisper: "small" | "medium"
+
     Client should send a mono 16kHz 16-bit PCM WAV for best results.
     Returns: {"text": "..."}
     """
@@ -285,16 +314,44 @@ async def stt_endpoint(audio: UploadFile = File(...), backend: str = Form("vosk"
         return {"text": ""}
 
     try:
-        text = transcribe_wav_bytes(data, backend=backend, model=model)
+        # Get cached transcriber instance for better performance
+        transcriber = get_transcriber(backend=backend, model=model)
+        text = transcriber.transcribe(data)
+        print(f"🎤 STT Transcription [{backend}.{model}]: \"{text}\"")  # Log transcription
         return {"text": text}
     except STTError as e:
         # Unsupported backend or unavailable model; treat as client or service error respectively.
         msg = str(e)
+        print(f"STTError in /stt endpoint: {msg}")  # Log the actual error
         if msg.lower().startswith("unsupported stt backend"):
             raise HTTPException(status_code=400, detail=msg)
         raise HTTPException(status_code=503, detail=msg)
     except Exception as e:
+        print(f"Unexpected error in /stt endpoint: {e}")  # Log unexpected errors
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"STT processing error: {e}")
+
+
+@app.post("/log_voice")
+async def log_voice(request: Request):
+    """Log voice input parsing results from the client."""
+    body = await request.json()
+    
+    transcription = body.get('transcription', '')
+    success = body.get('success', False)
+    
+    if success:
+        matched = body.get('matched_candidate', '')
+        uci = body.get('uci', '')
+        print(f"   ✅ Parsed as: \"{matched}\" → {uci}")
+    else:
+        candidates = body.get('candidates', [])
+        cand_str = ', '.join(candidates) if candidates else 'none'
+        print(f"   ❌ No valid move found (tried: {cand_str})")
+    
+    return {"status": "ok"}
+
 
 if __name__ == "__main__":
     import uvicorn
