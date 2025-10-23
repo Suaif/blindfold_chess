@@ -1,3 +1,6 @@
+import { loadChessLibraries } from './chesslib.js';
+import { LocalRecorder, normalizeSpeechToCandidates } from './audio.js';
+
 class BlindfoldChessApp {
     constructor() {
         this.ws = null;
@@ -325,54 +328,13 @@ class BlindfoldChessApp {
     initializeBoard(fen) {
         // Load chess.js and chessboard.js libraries
         if (typeof Chess === 'undefined' || typeof Chessboard === 'undefined') {
-            this.loadChessLibraries(() => {
-                this.createBoard(fen);
-            });
+            loadChessLibraries().then(() => this.createBoard(fen));
         } else {
             this.createBoard(fen);
         }
     }
     
-    loadChessLibraries(callback) {
-        // Load chess.js
-        const chessScript = document.createElement('script');
-        chessScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js';
-        document.head.appendChild(chessScript);
-        
-        // Load jQuery (required by chessboard.js 1.0.0)
-        const jqueryScript = document.createElement('script');
-        jqueryScript.src = 'https://code.jquery.com/jquery-3.6.0.min.js';
-        document.head.appendChild(jqueryScript);
-
-        // Load chessboard.js **after** jQuery finishes loading
-        let boardScript;
-        jqueryScript.onload = () => {
-            boardScript = document.createElement('script');
-            boardScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js';
-            boardScript.onload = checkLoaded;
-            document.head.appendChild(boardScript);
-            checkLoaded(); // in case jQuery load counts towards script tally
-        };
-        
-        // Load chessboard.js CSS
-        const boardCSS = document.createElement('link');
-        boardCSS.rel = 'stylesheet';
-        boardCSS.href = 'https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css';
-        document.head.appendChild(boardCSS);
-        
-        // Wait for libraries to load
-        let loaded = 0;
-        const checkLoaded = () => {
-            loaded++;
-            if (loaded >= 3 && typeof Chess !== 'undefined' && typeof Chessboard !== 'undefined' && window.jQuery) {
-                callback();
-            }
-        };
-        
-        chessScript.onload = checkLoaded;
-        // jqueryScript.onload handled above to chain boardScript
-        // boardScript.onload set within jqueryScript.onload
-    }
+    
     
     createBoard(fen) {
         this.game = new Chess(fen);
@@ -742,33 +704,15 @@ class BlindfoldChessApp {
         if (!playerTurn) {
             return this.showStatusMessage("It's not your turn yet.", 'info');
         }
-
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            return this.showStatusMessage('Microphone not available in this browser.', 'error');
-        }
-
-        // Prepare audio context and ScriptProcessor to capture raw PCM
+        
         this.isListening = true;
     const voiceText = document.getElementById('voiceText');
     const btn = document.getElementById('voiceMoveButton');
     if (btn) btn.textContent = '■ Stop';
     if (voiceText) voiceText.value = 'Recording...';
-
         try {
-            this.audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            this.inputSampleRate = this.audioContext.sampleRate;
-            this.audioSource = this.audioContext.createMediaStreamSource(this.audioStream);
-            this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
-            this.audioData = [];
-
-            this.processor.onaudioprocess = (e) => {
-                const input = e.inputBuffer.getChannelData(0);
-                // copy buffer to detach from underlying memory
-                this.audioData.push(new Float32Array(input));
-            };
-            this.audioSource.connect(this.processor);
-            this.processor.connect(this.audioContext.destination);
+            this.recorder = new LocalRecorder();
+            await this.recorder.start();
         } catch (e) {
             this.isListening = false;
             if (btn) btn.textContent = '🎤 Record';
@@ -786,16 +730,7 @@ class BlindfoldChessApp {
         if (voiceText) voiceText.value = 'Processing...';
 
         try {
-            // stop audio graph
-            if (this.processor) this.processor.disconnect();
-            if (this.audioSource) this.audioSource.disconnect();
-            if (this.audioStream) this.audioStream.getTracks().forEach(t => t.stop());
-            if (this.audioContext) await this.audioContext.close();
-        } catch {}
-
-        try {
-            const merged = this.mergeFloat32(this.audioData);
-            const wavBlob = this.encodeWAV(this.downsampleBuffer(merged, this.inputSampleRate, 16000), 16000);
+            const wavBlob = await (this.recorder ? this.recorder.stopAndGetWavBlob(16000) : Promise.reject('No recorder'));
 
             const form = new FormData();
             form.append('audio', wavBlob, 'speech.wav');
@@ -814,76 +749,17 @@ class BlindfoldChessApp {
             if (voiceText) voiceText.value = 'STT error';
             this.showStatusMessage('Speech recognition failed: ' + e, 'error');
         } finally {
-            // cleanup refs
-            this.audioContext = null;
-            this.audioSource = null;
-            this.processor = null;
-            this.audioStream = null;
-            this.audioData = [];
+            this.recorder = null;
         }
     }
 
-    mergeFloat32(chunks) {
-        let length = 0;
-        for (const c of chunks) length += c.length;
-        const result = new Float32Array(length);
-        let offset = 0;
-        for (const c of chunks) { result.set(c, offset); offset += c.length; }
-        return result;
-    }
-
-    downsampleBuffer(buffer, inRate, outRate) {
-        if (outRate === inRate) return buffer;
-        const ratio = inRate / outRate;
-        const newLen = Math.round(buffer.length / ratio);
-        const result = new Float32Array(newLen);
-        let pos = 0;
-        for (let i = 0; i < newLen; i++) {
-            const idx = i * ratio;
-            const idx0 = Math.floor(idx);
-            const idx1 = Math.min(idx0 + 1, buffer.length - 1);
-            const frac = idx - idx0;
-            result[i] = buffer[idx0] * (1 - frac) + buffer[idx1] * frac;
-        }
-        return result;
-    }
-
-    encodeWAV(samples, sampleRate) {
-        // 16-bit PCM WAV
-        const buffer = new ArrayBuffer(44 + samples.length * 2);
-        const view = new DataView(buffer);
-
-        const writeString = (v, o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-        const floatTo16 = (out, offset, input) => {
-            for (let i = 0; i < input.length; i++, offset += 2) {
-                let s = Math.max(-1, Math.min(1, input[i]));
-                view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-            }
-        };
-
-        writeString(view, 0, 'RIFF');
-        view.setUint32(4, 36 + samples.length * 2, true);
-        writeString(view, 8, 'WAVE');
-        writeString(view, 12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true); // PCM
-        view.setUint16(22, 1, true); // mono
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * 2, true); // byte rate
-        view.setUint16(32, 2, true); // block align
-        view.setUint16(34, 16, true); // bits per sample
-        writeString(view, 36, 'data');
-        view.setUint32(40, samples.length * 2, true);
-        floatTo16(view, 44, samples);
-
-        return new Blob([view], { type: 'audio/wav' });
-    }
+    
 
     handleSpokenMove(text) {
         const voiceText = document.getElementById('voiceText');
         if (voiceText) voiceText.value = text;
 
-        const candidates = this.normalizeSpeechToCandidates(text);
+        const candidates = normalizeSpeechToCandidates(text);
         for (const cand of candidates) {
             const ok = this.parseMoveToUCI(cand);
             if (ok) {
@@ -895,83 +771,7 @@ class BlindfoldChessApp {
         this.showStatusMessage('Could not parse spoken move. Try again or type it.', 'error');
     }
 
-    // Convert spoken text into likely move strings to try (coordinates or SAN)
-    normalizeSpeechToCandidates(text) {
-        if (!text) return [];
-        let s = text.toLowerCase().trim();
-        // strip punctuation
-        s = s.replace(/[^a-z0-9\s-]/g, ' ');
-        s = s.replace(/\s+/g, ' ');
-
-        // number words to digits
-        const numMap = {
-            'one': '1', 'won': '1',
-            'two': '2', 'to': '2', 'too': '2',
-            'three': '3',
-            'four': '4', 'for': '4',
-            'five': '5',
-            'six': '6',
-            'seven': '7',
-            'eight': '8', 'ate': '8'
-        };
-        s = s.split(' ').map(w => numMap[w] || w).join(' ');
-
-        // castles
-        s = s.replace(/castle\s+king\s*side|king\s*side\s*castle|short\s*castle|o\s*-\s*o/g, 'O-O');
-        s = s.replace(/castle\s+queen\s*side|queen\s*side\s*castle|long\s*castle|o\s*-\s*o\s*-\s*o/g, 'O-O-O');
-
-        // piece names -> SAN letters
-        s = s.replace(/knight/g, 'N')
-             .replace(/bishop/g, 'B')
-             .replace(/rook/g, 'R')
-             .replace(/queen/g, 'Q')
-             .replace(/king/g, 'K');
-
-        // captures
-        s = s.replace(/takes|x|by/g, 'x');
-        // promotion words
-        s = s.replace(/equals\s*queen|promote\s*to\s*queen|=\s*q/g, '=Q');
-        s = s.replace(/equals\s*rook|promote\s*to\s*rook|=\s*r/g, '=R');
-        s = s.replace(/equals\s*bishop|promote\s*to\s*bishop|=\s*b/g, '=B');
-        s = s.replace(/equals\s*knight|promote\s*to\s*knight|=\s*n/g, '=N');
-
-        const candidates = new Set();
-
-        // Direct SAN candidate
-        candidates.add(s.replace(/\s+/g, ''));
-
-        // Common SAN spacing (e.g., N f 3 -> Nf3)
-        candidates.add(s.replace(/\b([nbrqk])\s*([a-h])\s*([1-8])\b/gi, '$1$2$3').replace(/\s+/g, ''));
-
-        // Coordinate candidate: detect patterns like e 2 e 4 -> e2e4
-        const letters = s.match(/[a-h]/g) || [];
-        const digits = s.match(/[1-8]/g) || [];
-        // build naive coordinate by removing spaces
-        candidates.add(s.replace(/\s+/g, ''));
-
-        // Try extracting two squares in order
-        const sq = Array.from(s.matchAll(/([a-h])\s*([1-8])/g)).map(m => m[1] + m[2]);
-        if (sq.length >= 2) {
-            candidates.add((sq[0] + sq[1]).toLowerCase());
-        }
-
-        // Promotion coordinate like e7 e8 queen -> e7e8q
-        const promoMap = { 'queen': 'q', 'rook': 'r', 'bishop': 'b', 'knight': 'n', 'q': 'q', 'r': 'r', 'b': 'b', 'n': 'n' };
-        const promoMatch = s.match(/([a-h])\s*7\b.*?([a-h])\s*8\b.*?(queen|rook|bishop|knight|q|r|b|n)/);
-        if (promoMatch) {
-            const from = promoMatch[1] + '7';
-            const to = promoMatch[2] + '8';
-            const pr = promoMap[promoMatch[3]] || '';
-            candidates.add((from + to + pr).toLowerCase());
-        }
-
-        // Include castles explicitly
-        if (s.includes('O-O-O')) candidates.add('O-O-O');
-        if (s.includes('O-O')) candidates.add('O-O');
-
-        // Remove empties
-        return Array.from(candidates).filter(Boolean);
-    }
+    
 }
 
 // Initialize the application when the page loads

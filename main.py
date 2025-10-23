@@ -4,15 +4,13 @@ from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import chess
 import chess.engine
-import json
 import asyncio
 from typing import Dict, List, Optional, Set
-import io
-import wave
 from datetime import datetime
 from pathlib import Path
 import os
 from chat_assistant import ChatAssistant
+from stt import transcribe_wav_bytes, STTError
 
 STOCKFISH_PATH = r"C:\Users\ismas\projects\blindfold_chess\assets\stockfish\stockfish-windows-x86-64-avx2.exe"
 
@@ -121,56 +119,6 @@ manager = ConnectionManager()
 
 chat_assistant = ChatAssistant()
 
-# ---- Speech-to-Text (Vosk) setup ----
-# Allow overriding via env var VOSK_MODEL_PATH; else probe common locations.
-_vosk_models_by_path: Dict[str, object] = {}
-
-def _find_vosk_model_path(requested: Optional[str] = None) -> Optional[Path]:
-    # Highest priority: environment override
-    env_path = os.getenv("VOSK_MODEL_PATH")
-    if env_path:
-        p = Path(env_path)
-        if p.exists():
-            return p
-
-    # Requested preference
-    requested = (requested or 'auto').lower()
-    small_candidates = [
-        Path("static/models/vosk-model-small-en-us-0.15"),
-        Path("assets/speech_to_text/vosk-model-small-en-us-0.15"),
-    ]
-    large_candidates = [
-        Path("static/models/vosk-model-en-us-0.22"),
-        Path("assets/speech_to_text/vosk-model-en-us-0.22"),
-    ]
-
-    candidates: List[Path] = []
-    if requested in ('large', 'big', '0.22', 'en-us-0.22'):
-        candidates = large_candidates + small_candidates
-    elif requested in ('small', '0.15', 'small-en-us-0.15'):
-        candidates = small_candidates + large_candidates
-    else:  # auto: prefer large for better accuracy if available
-        candidates = large_candidates + small_candidates
-    for c in candidates:
-        if c.exists():
-            return c
-    return None
-
-def _load_vosk_model(requested: Optional[str] = None):
-    try:
-        import vosk  # type: ignore
-        model_path = _find_vosk_model_path(requested)
-        if not model_path:
-            return None
-        key = str(model_path.resolve())
-        if key not in _vosk_models_by_path:
-            print(f"Loading Vosk model from: {model_path}")
-            _vosk_models_by_path[key] = vosk.Model(str(model_path))
-        return _vosk_models_by_path[key]
-    except Exception as e:
-        print(f"Vosk model init failed: {e}")
-        return None
-
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
     return """
@@ -187,7 +135,7 @@ async def get_index():
             <h1>Loading Blindfold Chess Training...</h1>
             <p>Please wait while the application loads.</p>
         </div>
-        <script src="/static/js/main.js"></script>
+        <script type="module" src="/static/js/main.js"></script>
     </body>
     </html>
     """
@@ -332,48 +280,19 @@ async def stt_endpoint(audio: UploadFile = File(...), backend: str = Form("vosk"
     Client should send a mono 16kHz 16-bit PCM WAV for best results.
     Returns: {"text": "..."}
     """
-    backend = backend.lower()
-    if backend != "vosk":
-        raise HTTPException(status_code=400, detail="Only 'vosk' backend is implemented server-side.")
-
-    vosk_model = _load_vosk_model(model)
-    if vosk_model is None:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Vosk model not available. Set VOSK_MODEL_PATH env var or place a model at one of: "
-                "static/models/vosk-model-small-en-us-0.15, "
-                "assets/speech_to_text/vosk-model-small-en-us-0.15, "
-                "assets/speech_to_text/vosk-model-en-us-0.22."
-            ),
-        )
-
     data = await audio.read()
     if not data:
         return {"text": ""}
 
     try:
-        import vosk  # type: ignore
-        with wave.open(io.BytesIO(data), 'rb') as wf:
-            if wf.getnchannels() != 1 or wf.getsampwidth() != 2:
-                # Accept anyway but warn; ideally send mono 16-bit PCM
-                pass
-            sample_rate = wf.getframerate()
-            rec = vosk.KaldiRecognizer(vosk_model, sample_rate)
-            result_text = ""
-            while True:
-                buf = wf.readframes(4000)
-                if len(buf) == 0:
-                    break
-                if rec.AcceptWaveform(buf):
-                    pass
-            final = rec.FinalResult()
-            try:
-                j = json.loads(final)
-                result_text = j.get('text', '')
-            except Exception:
-                result_text = ""
-            return {"text": result_text}
+        text = transcribe_wav_bytes(data, backend=backend, model=model)
+        return {"text": text}
+    except STTError as e:
+        # Unsupported backend or unavailable model; treat as client or service error respectively.
+        msg = str(e)
+        if msg.lower().startswith("unsupported stt backend"):
+            raise HTTPException(status_code=400, detail=msg)
+        raise HTTPException(status_code=503, detail=msg)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"STT processing error: {e}")
 

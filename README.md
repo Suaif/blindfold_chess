@@ -95,7 +95,13 @@ Notes
 - Spoken phrases like "e two e four", "castle king side", "knight f three", or "e seven e eight queen" are normalized to legal chess moves.
 
 Whisper (optional, future)
-- The voice backend is modular. A Whisper-based server backend can be added by implementing /stt with Whisper and selecting it in the UI. If you want this, we can wire up faster-whisper or whisper.cpp as a drop-in alternative.
+- The voice backend is modular. Server-side code is now in `stt.py` with a simple function `transcribe_wav_bytes(...)` so we can plug in other engines easily. A Whisper-based backend can be added by implementing a Whisper branch in `transcribe_wav_bytes()` (or a dedicated `transcribe_wav_bytes_whisper()` helper) and selecting it in the UI.
+
+## Code Organization
+
+- `main.py`: FastAPI app, websocket/game flow, and thin HTTP endpoints (including `/stt`).
+- `stt.py`: Speech-to-Text utilities. Contains Vosk model discovery/loading and WAV transcription. Designed to support future Whisper integration without changing `main.py`.
+- `chat_assistant.py`: Ollama-powered chat logic for recap and training questions.
 
 ## License
 
