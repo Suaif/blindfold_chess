@@ -111,6 +111,59 @@ body {
     background: #2d3748;
 }
 
+/* Voice input button and status */
+.voice-move-button {
+    padding: 10px 12px;
+    background: #805ad5;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.voice-move-button:hover {
+    background: #6b46c1;
+}
+
+.voice-move-button:disabled {
+    background: #b794f4;
+    cursor: not-allowed;
+}
+
+.voice-status {
+    margin-left: 8px;
+    color: #4a5568;
+    align-self: center;
+}
+
+.voice-model-select {
+    padding: 8px 10px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    background: white;
+    color: #2d3748;
+}
+
+.voice-controls-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    width: 100%;
+    max-width: 500px;
+}
+
+.voice-text {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    background: #f7fafc;
+    color: #2d3748;
+}
+
 /* Move List Panel */
 .move-list-panel {
     min-height: 400px;
@@ -368,6 +421,44 @@ body {
     background: #bee3f8;
     color: #2c5282;
     border: 1px solid #63b3ed;
+}
+
+/* Toast (popup) container for status messages - fixed overlay so it doesn't shift layout */
+.toast-container {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 9999;
+    pointer-events: none; /* allow clicks to pass through except on the toasts */
+}
+
+/* Each toast uses existing .status-message styles plus these */
+.toast {
+    pointer-events: auto;
+    min-width: 280px;
+    max-width: 380px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.2);
+    margin: 0; /* override default margin in flow */
+    opacity: 0;
+    transform: translateY(8px);
+    animation: toast-in 180ms ease-out forwards;
+}
+
+.toast-hide {
+    animation: toast-out 160ms ease-in forwards;
+}
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-out {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(8px); }
 }
 
 /* Responsive Design */
