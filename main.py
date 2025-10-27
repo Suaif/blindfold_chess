@@ -11,6 +11,36 @@ from pathlib import Path
 import os
 from chat_assistant import ChatAssistant
 from stt import create_transcriber, STTError, AudioTranscriber
+from tts import synthesize_to_base64
+
+FILE_NAMES = {
+    "a": "A",
+    "b": "B",
+    "c": "C",
+    "d": "D",
+    "e": "E",
+    "f": "F",
+    "g": "G",
+    "h": "H",
+}
+
+RANK_NAMES = {
+    "1": "one",
+    "2": "two",
+    "3": "three",
+    "4": "four",
+    "5": "five",
+    "6": "six",
+    "7": "seven",
+    "8": "eight",
+}
+
+PROMOTION_NAMES = {
+    "q": "queen",
+    "r": "rook",
+    "b": "bishop",
+    "n": "knight",
+}
 
 STOCKFISH_PATH = r"C:\Users\ismas\projects\blindfold_chess\assets\stockfish\stockfish-windows-x86-64-avx2.exe"
 
@@ -139,6 +169,53 @@ def get_transcriber(backend: str = "vosk", model: str = "auto") -> AudioTranscri
     return transcriber_cache[cache_key]
 
 
+def uci_to_spoken_text(uci: str) -> str:
+    if not uci or len(uci) < 4:
+        return uci
+    from_file, from_rank, to_file, to_rank = uci[0], uci[1], uci[2], uci[3]
+    parts = [
+        FILE_NAMES.get(from_file, from_file.upper()),
+        RANK_NAMES.get(from_rank, from_rank),
+        "to",
+        FILE_NAMES.get(to_file, to_file.upper()),
+        RANK_NAMES.get(to_rank, to_rank),
+    ]
+    if len(uci) > 4:
+        promo_piece = PROMOTION_NAMES.get(uci[4].lower(), uci[4])
+        parts.extend(["promote to", promo_piece])
+    return " ".join(parts)
+
+
+async def create_tts_payload(text: Optional[str], voice: Optional[str] = None) -> Optional[Dict[str, str]]:
+    if not text or not text.strip():
+        return None
+    loop = asyncio.get_running_loop()
+    audio_b64 = await loop.run_in_executor(None, synthesize_to_base64, text, voice)
+    payload: Dict[str, str] = {"text": text}
+    if audio_b64:
+        payload["audio"] = audio_b64
+    return payload
+
+
+async def send_tts_message(websocket: WebSocket, text: Optional[str], voice: Optional[str] = None):
+    payload = await create_tts_payload(text, voice=voice)
+    if payload:
+        message = {"type": "tts", **payload}
+        await manager.broadcast_to_client(websocket, message)
+
+
+def get_last_move_uci(board: chess.Board) -> Optional[str]:
+    try:
+        return board.peek().uci()
+    except IndexError:
+        return None
+
+
+class TTSRequest(BaseModel):
+    text: str
+    voice: Optional[str] = None
+
+
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
     return """
@@ -202,6 +279,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 if game_state.player_color == chess.BLACK:
                     engine_success, engine_result = await game_state.get_engine_move()
                     if engine_success:
+                        engine_move_uci = get_last_move_uci(game_state.board)
+                        engine_speech = None
+                        if engine_move_uci:
+                            spoken_move = uci_to_spoken_text(engine_move_uci)
+                            engine_speech = f"Engine plays {spoken_move}."
+                        else:
+                            engine_speech = f"Engine plays {engine_result}."
+                        await send_tts_message(websocket, engine_speech)
                         await manager.broadcast_to_client(websocket, {
                             "type": "position_update",
                             "fen": game_state.board.fen(),
@@ -217,64 +302,78 @@ async def websocket_endpoint(websocket: WebSocket):
             elif message_type == "move":
                 if not game_state.game_active:
                     continue
-                
+
                 move_uci = data.get("move")
                 source = data.get("source", "manual")  # Track if move is from voice or manual input
                 success, result = game_state.make_move(move_uci)
-                
-                if success:
-                    print(f"✅ -  Move played: {move_uci} → {result}")
-                    # Check if game is over
-                    if game_state.board.is_game_over():
-                        # First send final position so client sees the mating move
-                        await manager.broadcast_to_client(websocket, {
-                            "type": "position_update",
-                            "fen": game_state.board.fen(),
-                            "last_move": result,
-                            "move_history": game_state.move_history,
-                        })
-                        result_type = "checkmate" if game_state.board.is_checkmate() else "draw"
-                        await manager.broadcast_to_client(websocket, {
-                            "type": "game_over",
-                            "result": result_type,
-                            "winner": "white" if game_state.board.turn == chess.BLACK else "black"
-                        })
-                        game_state.game_active = False
-                        continue
-                    
-                    # Engine's turn
-                    if game_state.board.turn != game_state.player_color:
-                        engine_success, engine_result = await game_state.get_engine_move()
-                        if engine_success:
-                            if game_state.board.is_game_over():
-                                # Send final position before announcing game over
-                                await manager.broadcast_to_client(websocket, {
-                                    "type": "position_update",
-                                    "fen": game_state.board.fen(),
-                                    "last_move": engine_result,
-                                    "move_history": game_state.move_history,
-                                })
-                                result_type = "checkmate" if game_state.board.is_checkmate() else "draw"
-                                await manager.broadcast_to_client(websocket, {
-                                    "type": "game_over",
-                                    "result": result_type,
-                                    "winner": "white" if game_state.board.turn == chess.BLACK else "black"
-                                })
-                                game_state.game_active = False
-                                continue
-                    
+
+                if not success:
+                    print(f"✗ - Invalid move: {move_uci} → {result}")
+                    await manager.broadcast_to_client(websocket, {
+                        "type": "invalid_move",
+                        "message": result
+                    })
+                    continue
+
+                print(f"✅ -  Move played: {move_uci} → {result}")
+
+                # Player's move caused an immediate game over
+                if game_state.board.is_game_over():
                     await manager.broadcast_to_client(websocket, {
                         "type": "position_update",
                         "fen": game_state.board.fen(),
                         "last_move": result,
                         "move_history": game_state.move_history,
                     })
-                else:
-                    print(f"✗ - Invalid move: {move_uci} → {result}")
+                    result_type = "checkmate" if game_state.board.is_checkmate() else "draw"
                     await manager.broadcast_to_client(websocket, {
-                        "type": "invalid_move",
-                        "message": result
+                        "type": "game_over",
+                        "result": result_type,
+                        "winner": "white" if game_state.board.turn == chess.BLACK else "black"
                     })
+                    game_state.game_active = False
+                    continue
+
+                engine_result = None
+                if game_state.board.turn != game_state.player_color:
+                    engine_success, engine_result = await game_state.get_engine_move()
+                    if engine_success:
+                        engine_move_uci = get_last_move_uci(game_state.board)
+                        spoken_move = (
+                            uci_to_spoken_text(engine_move_uci)
+                            if engine_move_uci
+                            else engine_result
+                        )
+                        await send_tts_message(websocket, f"Engine plays {spoken_move}.")
+
+                        if game_state.board.is_game_over():
+                            await manager.broadcast_to_client(websocket, {
+                                "type": "position_update",
+                                "fen": game_state.board.fen(),
+                                "last_move": engine_result,
+                                "move_history": game_state.move_history,
+                            })
+                            result_type = "checkmate" if game_state.board.is_checkmate() else "draw"
+                            await manager.broadcast_to_client(websocket, {
+                                "type": "game_over",
+                                "result": result_type,
+                                "winner": "white" if game_state.board.turn == chess.BLACK else "black"
+                            })
+                            game_state.game_active = False
+                            continue
+                    else:
+                        await manager.broadcast_to_client(websocket, {
+                            "type": "error",
+                            "message": f"Engine failed to make a move: {engine_result}"
+                        })
+                        continue
+
+                await manager.broadcast_to_client(websocket, {
+                    "type": "position_update",
+                    "fen": game_state.board.fen(),
+                    "last_move": engine_result or result,
+                    "move_history": game_state.move_history,
+                })
             
             elif message_type == "chat":
                 user_message = data.get("message", "")
@@ -311,14 +410,27 @@ async def stt_endpoint(audio: UploadFile = File(...), backend: str = Form("vosk"
     """
     data = await audio.read()
     if not data:
-        return {"text": ""}
+        empty_payload = await create_tts_payload("I did not catch any audio.")
+        response: Dict[str, object] = {"text": ""}
+        if empty_payload:
+            response["tts"] = empty_payload
+        return response
 
     try:
         # Get cached transcriber instance for better performance
         transcriber = get_transcriber(backend=backend, model=model)
         text = transcriber.transcribe(data)
         print(f"🎤 STT Transcription [{backend}.{model}]: \"{text}\"")  # Log transcription
-        return {"text": text}
+        feedback_text = (
+            f"Heard {text}."
+            if text.strip()
+            else "Sorry, I could not understand that move."
+        )
+        tts_payload = await create_tts_payload(feedback_text)
+        response: Dict[str, object] = {"text": text}
+        if tts_payload:
+            response["tts"] = tts_payload
+        return response
     except STTError as e:
         # Unsupported backend or unavailable model; treat as client or service error respectively.
         msg = str(e)
@@ -331,6 +443,14 @@ async def stt_endpoint(audio: UploadFile = File(...), backend: str = Form("vosk"
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"STT processing error: {e}")
+
+
+@app.post("/tts/speak")
+async def tts_speak(payload: TTSRequest):
+    tts_payload = await create_tts_payload(payload.text, voice=payload.voice)
+    if not tts_payload:
+        raise HTTPException(status_code=400, detail="No text provided for TTS.")
+    return {"tts": tts_payload}
 
 
 @app.post("/log_voice")

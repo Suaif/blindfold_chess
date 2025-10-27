@@ -14,6 +14,7 @@ class BlindfoldChessApp {
         this.piecesVisible = true; // track piece visibility
         this.recognition = null;   // SpeechRecognition instance
         this.isListening = false;
+        this.ttsAudio = null;
         
         this.initializeApp();
     }
@@ -100,7 +101,83 @@ class BlindfoldChessApp {
             case 'error':
                 this.showStatusMessage(message.message, 'error');
                 break;
+
+            case 'tts':
+                this.playTts(message);
+                break;
         }
+    }
+
+    playTts(ttsPayload) {
+        if (!ttsPayload) return;
+
+        if (this.ttsAudio) {
+            try {
+                this.ttsAudio.pause();
+            } catch (err) {
+                console.warn('Failed to stop previous TTS audio:', err);
+            }
+        }
+
+        if (ttsPayload.audio) {
+            const audio = new Audio(`data:audio/wav;base64,${ttsPayload.audio}`);
+            audio.addEventListener('ended', () => {
+                if (this.ttsAudio === audio) {
+                    this.ttsAudio = null;
+                }
+            });
+            audio.play().catch(err => {
+                console.warn('TTS playback failed:', err);
+            });
+            this.ttsAudio = audio;
+        } else if (ttsPayload.text) {
+            this.showStatusMessage(ttsPayload.text, 'info');
+        }
+    }
+
+    async requestTts(text) {
+        if (!text) return;
+        try {
+            const res = await fetch('/tts/speak', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+            if (!res.ok) {
+                console.warn('TTS request failed with status', res.status);
+                return;
+            }
+            const payload = await res.json();
+            if (payload && payload.tts) {
+                this.playTts(payload.tts);
+            }
+        } catch (error) {
+            console.warn('TTS request error:', error);
+        }
+    }
+
+    humanizeMove(moveText) {
+        if (!moveText) return '';
+        const lower = moveText.toLowerCase();
+        const fileNames = { a: 'A', b: 'B', c: 'C', d: 'D', e: 'E', f: 'F', g: 'G', h: 'H' };
+        const rankNames = { '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five', '6': 'six', '7': 'seven', '8': 'eight' };
+
+        if (/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(lower)) {
+            let spoken = `${fileNames[lower[0]]} ${rankNames[lower[1]]} to ${fileNames[lower[2]]} ${rankNames[lower[3]]}`;
+            if (lower.length === 5) {
+                const promoNames = { q: 'queen', r: 'rook', b: 'bishop', n: 'knight' };
+                spoken += ` promote to ${promoNames[lower[4]] || lower[4]}`;
+            }
+            return spoken;
+        }
+
+        if (moveText === 'O-O') return 'castle king side';
+        if (moveText === 'O-O-O') return 'castle queen side';
+
+        return moveText
+            .replace(/x/g, ' takes ')
+            .replace(/\+/g, ' check')
+            .replace(/#/g, ' checkmate');
     }
     
     showSetupScreen() {
@@ -747,6 +824,7 @@ class BlindfoldChessApp {
             const res = await fetch('/stt', { method: 'POST', body: form });
             if (!res.ok) throw new Error('STT request failed');
             const data = await res.json();
+            if (data.tts) this.playTts(data.tts);
             if (voiceText) voiceText.value = data.text || '';
             if (data.text) this.handleSpokenMove(data.text);
         } catch (e) {
@@ -771,6 +849,18 @@ class BlindfoldChessApp {
             const ok = this.parseMoveToUCI(cand);
             if (ok) {
                 console.log(`   ✅ Match found: "${cand}" → UCI: ${ok}`);
+                const spoken = this.humanizeMove(ok);
+                this.requestTts(`Move recognized: ${spoken}.`);
+                fetch('/log_voice', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        transcription: text,
+                        matched_candidate: cand,
+                        uci: ok,
+                        success: true
+                    })
+                }).catch(() => {});
                 
                 // submit through existing path with 'voice' source
                 this.submitManualMove(cand, 'voice');
@@ -778,6 +868,7 @@ class BlindfoldChessApp {
             }
         }
         console.log(`   ❌ No valid move found`);
+        this.requestTts('Sorry, that move was not recognized.');
         
         // Send failure log to server
         fetch('/log_voice', {
