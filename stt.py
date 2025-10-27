@@ -388,9 +388,11 @@ def transcribe_wav_bytes_whisper(wav_bytes: bytes, model: Optional[str] = "small
         try:
             segments, info = model_obj.transcribe(
                 tmp_file,
-                beam_size=1,
+                beam_size=5,
                 vad_filter=True,
                 temperature=0.0,
+                initial_prompt= "Transcribe in English using chess notation. Pieces: king, queen, rook, bishop, knight. Words: takes, check, checkmate. Files: a b c d e f g h. Ranks: one two three four five six seven eight.",
+                language="en",
             )
         except Exception as e:
             raise STTError(f"Whisper transcription failed: {e}") from e

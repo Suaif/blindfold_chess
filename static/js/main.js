@@ -15,6 +15,7 @@ class BlindfoldChessApp {
         this.recognition = null;   // SpeechRecognition instance
         this.isListening = false;
         this.ttsAudio = null;
+        this.ttsQueue = [];
         
         this.initializeApp();
     }
@@ -111,27 +112,50 @@ class BlindfoldChessApp {
     playTts(ttsPayload) {
         if (!ttsPayload) return;
 
-        if (this.ttsAudio) {
-            try {
-                this.ttsAudio.pause();
-            } catch (err) {
-                console.warn('Failed to stop previous TTS audio:', err);
-            }
-        }
+        const enqueue = (payload) => {
+            this.ttsQueue.push(payload);
+            this.processTtsQueue();
+        };
 
-        if (ttsPayload.audio) {
-            const audio = new Audio(`data:audio/wav;base64,${ttsPayload.audio}`);
+        enqueue(ttsPayload);
+    }
+
+    processTtsQueue() {
+        if (this.ttsAudio) return; // already playing
+        if (!this.ttsQueue.length) return;
+
+        const payload = this.ttsQueue.shift();
+        if (!payload) return;
+
+        if (payload.audio) {
+            const audio = new Audio(`data:audio/wav;base64,${payload.audio}`);
             audio.addEventListener('ended', () => {
                 if (this.ttsAudio === audio) {
                     this.ttsAudio = null;
+                    this.processTtsQueue();
                 }
             });
-            audio.play().catch(err => {
-                console.warn('TTS playback failed:', err);
+            audio.addEventListener('error', (err) => {
+                console.warn('TTS playback error:', err);
+                if (this.ttsAudio === audio) {
+                    this.ttsAudio = null;
+                    this.processTtsQueue();
+                }
             });
             this.ttsAudio = audio;
-        } else if (ttsPayload.text) {
-            this.showStatusMessage(ttsPayload.text, 'info');
+            audio.play().catch(err => {
+                console.warn('TTS playback failed:', err);
+                if (this.ttsAudio === audio) {
+                    this.ttsAudio = null;
+                    this.processTtsQueue();
+                }
+            });
+        } else {
+            if (payload.text) {
+                this.showStatusMessage(payload.text, 'info');
+            }
+            // Move to next in queue
+            this.processTtsQueue();
         }
     }
 
@@ -158,26 +182,60 @@ class BlindfoldChessApp {
 
     humanizeMove(moveText) {
         if (!moveText) return '';
-        const lower = moveText.toLowerCase();
-        const fileNames = { a: 'A', b: 'B', c: 'C', d: 'D', e: 'E', f: 'F', g: 'G', h: 'H' };
-        const rankNames = { '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five', '6': 'six', '7': 'seven', '8': 'eight' };
 
-        if (/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(lower)) {
-            let spoken = `${fileNames[lower[0]]} ${rankNames[lower[1]]} to ${fileNames[lower[2]]} ${rankNames[lower[3]]}`;
-            if (lower.length === 5) {
-                const promoNames = { q: 'queen', r: 'rook', b: 'bishop', n: 'knight' };
-                spoken += ` promote to ${promoNames[lower[4]] || lower[4]}`;
+        const normalizeSan = (san) => {
+            if (!san) return '';
+            let s = san.trim();
+            s = s.replace(/[+#?!]+$/g, '');
+
+            if (/^O-O-O/i.test(s)) return 'castle queen side';
+            if (/^O-O/i.test(s)) return 'castle king side';
+
+            const matchSquares = Array.from(s.matchAll(/([a-h][1-8])/gi));
+            const dest = matchSquares.length ? matchSquares[matchSquares.length - 1][1].toLowerCase() : s.toLowerCase();
+
+            const promoMatch = s.match(/=([QRBN])/i);
+            if (promoMatch) {
+                const promoNames = { Q: 'queen', R: 'rook', B: 'bishop', N: 'knight' };
+                const piece = promoNames[promoMatch[1].toUpperCase()] || promoMatch[1].toLowerCase();
+                return `${dest} promotes to ${piece}`;
             }
-            return spoken;
+
+            const isCapture = s.includes('x');
+            const pieceNames = { K: 'king', Q: 'queen', R: 'rook', B: 'bishop', N: 'knight' };
+            const prefix = s[0] ? s[0].toUpperCase() : '';
+
+            if (pieceNames[prefix]) {
+                const name = pieceNames[prefix];
+                return isCapture ? `${name} takes ${dest}` : `${name} ${dest}`;
+            }
+
+            return isCapture ? `pawn takes ${dest}` : dest;
+        };
+
+        const currentFen = this.game ? this.game.fen() : undefined;
+        if (!currentFen) return normalizeSan(moveText);
+
+        const temp = new Chess(currentFen);
+
+        // Try UCI first
+        const uciMatch = moveText.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
+        if (uciMatch) {
+            const [, from, to, promo] = uciMatch;
+            const mv = temp.move({ from: from.toLowerCase(), to: to.toLowerCase(), promotion: promo ? promo.toLowerCase() : undefined });
+            if (mv && mv.san) return normalizeSan(mv.san);
         }
 
-        if (moveText === 'O-O') return 'castle king side';
-        if (moveText === 'O-O-O') return 'castle queen side';
+        // Try SAN/lan via sloppy parsing
+        try {
+            const clone = new Chess(currentFen);
+            const mv = clone.move(moveText, { sloppy: true });
+            if (mv && mv.san) return normalizeSan(mv.san);
+        } catch (_) {
+            // fall back to raw normalization
+        }
 
-        return moveText
-            .replace(/x/g, ' takes ')
-            .replace(/\+/g, ' check')
-            .replace(/#/g, ' checkmate');
+        return normalizeSan(moveText);
     }
     
     showSetupScreen() {
@@ -288,10 +346,10 @@ class BlindfoldChessApp {
                         </div>
                         <div class="voice-controls-row">
                             <select id="voiceModelSelect" class="voice-model-select" title="Choose STT backend and model">
-                                <option value="vosk.large">Vosk Large (en-us-0.22)</option>
-                                <option value="vosk.small">Vosk Small (small-en-us-0.15)</option>
-                                <option value="whisper.small" selected>Whisper Small (CUDA if available)</option>
-                                <option value="whisper.medium">Whisper Medium (CUDA if available)</option>
+                                <option value="vosk.large">Vosk Large</option>
+                                <option value="vosk.small">Vosk Small</option>
+                                <option value="whisper.small" selected>Whisper Small</option>
+                                <option value="whisper.medium">Whisper Medium</option>
                             </select>
                             <button id="voiceMoveButton" class="voice-move-button" title="Record / Stop">🎤 Record</button>
                             <input type="text" id="voiceText" class="voice-text" placeholder="Recognition output..." readonly>
@@ -763,7 +821,7 @@ class BlindfoldChessApp {
             const transcript = Array.from(e.results)
                 .map(r => r[0].transcript)
                 .join(' ');
-            this.handleSpokenMove(transcript);
+            this.handleSpokenMove({ text: transcript });
         };
 
         this.recognition = rec;
@@ -826,7 +884,7 @@ class BlindfoldChessApp {
             const data = await res.json();
             if (data.tts) this.playTts(data.tts);
             if (voiceText) voiceText.value = data.text || '';
-            if (data.text) this.handleSpokenMove(data.text);
+            this.handleSpokenMove(data);
         } catch (e) {
             if (voiceText) voiceText.value = 'STT error';
             this.showStatusMessage('Speech recognition failed: ' + e, 'error');
@@ -837,54 +895,85 @@ class BlindfoldChessApp {
 
     
 
-    handleSpokenMove(text) {
-        const voiceText = document.getElementById('voiceText');
-        if (voiceText) voiceText.value = text;
+    handleSpokenMove(result) {
+        const payload = typeof result === "string" ? { text: result } : (result || {});
+        const rawText = typeof payload.text === 'string' ? payload.text : '';
+        const text = rawText.trim();
 
-        console.log(`🎤 Voice input: "${text}"`);
-        const candidates = normalizeSpeechToCandidates(text);
-        console.log(`   Generated candidates: [${candidates.join(', ')}]`);
-        
-        for (const cand of candidates) {
+        const voiceText = document.getElementById('voiceText');
+        if (voiceText) voiceText.value = rawText;
+
+        const backendCandidates = Array.isArray(payload.candidates)
+            ? payload.candidates
+            : (payload.normalized && Array.isArray(payload.normalized.candidates)
+                ? payload.normalized.candidates
+                : []);
+        const fallbackCandidates = text ? normalizeSpeechToCandidates(text) : [];
+
+        const orderedCandidates = [];
+        const seen = new Set();
+        for (const cand of backendCandidates) {
+            const cleaned = (cand || '').trim();
+            if (!cleaned || seen.has(cleaned)) continue;
+            orderedCandidates.push(cleaned);
+            seen.add(cleaned);
+        }
+        for (const cand of fallbackCandidates) {
+            const cleaned = (cand || '').trim();
+            if (!cleaned || seen.has(cleaned)) continue;
+            orderedCandidates.push(cleaned);
+            seen.add(cleaned);
+        }
+
+        console.log(`[STT] Transcript: "${text}"`);
+        if (backendCandidates.length) {
+            console.log(`[STT] Backend candidates: [${backendCandidates.join(', ')}]`);
+        }
+        if (payload.normalized) {
+            console.log('[STT] Normalizer details:', payload.normalized);
+        }
+        console.log(`[STT] Candidate queue: [${orderedCandidates.join(', ')}]`);
+
+        for (const cand of orderedCandidates) {
             const ok = this.parseMoveToUCI(cand);
             if (ok) {
-                console.log(`   ✅ Match found: "${cand}" → UCI: ${ok}`);
+                console.log(`[STT] Matched candidate "${cand}" -> UCI ${ok}`);
                 const spoken = this.humanizeMove(ok);
-                this.requestTts(`Move recognized: ${spoken}.`);
+                // this.requestTts(`Move recognized: ${spoken}.`);
                 fetch('/log_voice', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         transcription: text,
                         matched_candidate: cand,
                         uci: ok,
-                        success: true
-                    })
+                        candidates: orderedCandidates,
+                        normalized: payload.normalized || null,
+                        success: true,
+                    }),
                 }).catch(() => {});
-                
-                // submit through existing path with 'voice' source
+
                 this.submitManualMove(cand, 'voice');
                 return;
             }
         }
-        console.log(`   ❌ No valid move found`);
-        this.requestTts('Sorry, that move was not recognized.');
-        
-        // Send failure log to server
+
+        console.log('[STT] No valid candidate matched board state');
+        // this.requestTts('Sorry, that move was not recognized.');
+
         fetch('/log_voice', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 transcription: text,
-                candidates: candidates,
-                success: false
-            })
-        }).catch(() => {}); // Ignore errors
-        
+                candidates: orderedCandidates,
+                normalized: payload.normalized || null,
+                success: false,
+            }),
+        }).catch(() => {});
+
         this.showStatusMessage('Could not parse spoken move. Try again or type it.', 'error');
     }
-
-    
 }
 
 // Initialize the application when the page loads

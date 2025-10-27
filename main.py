@@ -7,9 +7,11 @@ import chess.engine
 import asyncio
 from typing import Dict, List, Optional, Set
 from datetime import datetime
+import re
 from pathlib import Path
 import os
 from chat_assistant import ChatAssistant
+from chess_normalizer import normalize_transcription
 from stt import create_transcriber, STTError, AudioTranscriber
 from tts import synthesize_to_base64
 
@@ -197,18 +199,90 @@ async def create_tts_payload(text: Optional[str], voice: Optional[str] = None) -
     return payload
 
 
+
+PIECE_WORDS_SPOKEN = {
+    'K': 'king',
+    'Q': 'queen',
+    'R': 'rook',
+    'B': 'bishop',
+    'N': 'knight',
+}
+
+
+def san_to_spoken_text(san: str) -> str:
+    """Convert SAN (e.g., 'Qe7', 'e4', 'O-O') into spoken form.
+
+    - Pieces: 'Qe7' -> 'queen e7'
+    - Pawns: 'e4' -> 'e4'
+    - Captures: 'Qxe7' -> 'queen takes e7'
+    - Castling: 'O-O' -> 'castle king side', 'O-O-O' -> 'castle queen side'
+    - Promotions: 'e8=Q' -> 'e8 promotes to queen'
+    - Trailing annotations (+, #, !, ?) are ignored.
+    """
+    if not san:
+        return ""
+    s = san.strip()
+    # Strip trailing annotations (check, mate, !, ?)
+    s = re.sub(r"[+#?!]+$", "", s)
+    # Castling
+    if s.upper().startswith("O-O-O"):
+        return "castle queen side"
+    if s.upper().startswith("O-O"):
+        return "castle king side"
+    # Destination square: last [a-h][1-8]
+    m = list(re.finditer(r"[a-h][1-8]", s, flags=re.IGNORECASE))
+    dest = m[-1].group(0).lower() if m else s
+    # Promotion
+    pm = re.search(r"=([QRBN])", s, flags=re.IGNORECASE)
+    if pm:
+        piece = PIECE_WORDS_SPOKEN.get(pm.group(1).upper(), "").lower()
+        if piece:
+            return f"{dest} promotes to {piece}"
+
+    is_capture = "x" in s
+    first = s[0].upper()
+    if first in PIECE_WORDS_SPOKEN:
+        name = PIECE_WORDS_SPOKEN[first]
+        return f"{name} takes {dest}" if is_capture else f"{name} {dest}"
+
+    # Pawn moves
+    if is_capture:
+        return f"pawn takes {dest}"
+    return dest
+
+
+SAN_PATTERN = re.compile(r"^[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?$", re.IGNORECASE)
+UCI_PATTERN = re.compile(r"^[a-h][1-8][a-h][1-8][qrbn]?$", re.IGNORECASE)
+
+
+def candidate_to_spoken_text(candidate: str) -> str:
+    if not candidate:
+        return ""
+    c = candidate.strip()
+    if not c:
+        return ""
+
+    if c.upper().startswith("O-O"):
+        return san_to_spoken_text(c)
+
+    if SAN_PATTERN.match(c):
+        return san_to_spoken_text(c)
+
+    if UCI_PATTERN.match(c):
+        dest = c[2:4].lower()
+        if len(c) == 5:
+            promo_piece = PIECE_WORDS_SPOKEN.get(c[4].upper(), c[4].lower())
+            return f"{dest} promotes to {promo_piece}"
+        return dest
+
+    return c
+
+
 async def send_tts_message(websocket: WebSocket, text: Optional[str], voice: Optional[str] = None):
     payload = await create_tts_payload(text, voice=voice)
     if payload:
         message = {"type": "tts", **payload}
         await manager.broadcast_to_client(websocket, message)
-
-
-def get_last_move_uci(board: chess.Board) -> Optional[str]:
-    try:
-        return board.peek().uci()
-    except IndexError:
-        return None
 
 
 class TTSRequest(BaseModel):
@@ -279,14 +353,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 if game_state.player_color == chess.BLACK:
                     engine_success, engine_result = await game_state.get_engine_move()
                     if engine_success:
-                        engine_move_uci = get_last_move_uci(game_state.board)
-                        engine_speech = None
-                        if engine_move_uci:
-                            spoken_move = uci_to_spoken_text(engine_move_uci)
-                            engine_speech = f"Engine plays {spoken_move}."
-                        else:
-                            engine_speech = f"Engine plays {engine_result}."
-                        await send_tts_message(websocket, engine_speech)
+                        spoken_move = san_to_spoken_text(engine_result)
+                        await send_tts_message(websocket, f"Engine plays {spoken_move}.")
+                        print(f"TTS - Engine: Engine plays {spoken_move}")
                         await manager.broadcast_to_client(websocket, {
                             "type": "position_update",
                             "fen": game_state.board.fen(),
@@ -338,13 +407,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 if game_state.board.turn != game_state.player_color:
                     engine_success, engine_result = await game_state.get_engine_move()
                     if engine_success:
-                        engine_move_uci = get_last_move_uci(game_state.board)
-                        spoken_move = (
-                            uci_to_spoken_text(engine_move_uci)
-                            if engine_move_uci
-                            else engine_result
-                        )
+                        spoken_move = san_to_spoken_text(engine_result)
                         await send_tts_message(websocket, f"Engine plays {spoken_move}.")
+                        print(f"TTS - Engine: Engine plays {spoken_move}")
 
                         if game_state.board.is_game_over():
                             await manager.broadcast_to_client(websocket, {
@@ -420,14 +485,29 @@ async def stt_endpoint(audio: UploadFile = File(...), backend: str = Form("vosk"
         # Get cached transcriber instance for better performance
         transcriber = get_transcriber(backend=backend, model=model)
         text = transcriber.transcribe(data)
-        print(f"🎤 STT Transcription [{backend}.{model}]: \"{text}\"")  # Log transcription
+        normalization = normalize_transcription(text)
+        print(f"STT Transcription [{backend}.{model}]: \"{text}\"")
+        if normalization.candidates:
+            print(f"    candidates: {normalization.candidates}")
+        if normalization.applied_rules:
+            print(f"    normalization rules: {normalization.applied_rules}")
+
+        spoken_candidate = ""
+        if normalization.candidates:
+            spoken_candidate = candidate_to_spoken_text(normalization.candidates[0])
+        fallback_text = text.strip()
+        feedback_phrase = spoken_candidate or fallback_text
         feedback_text = (
-            f"Heard {text}."
-            if text.strip()
+            f"Heard {feedback_phrase}."
+            if feedback_phrase
             else "Sorry, I could not understand that move."
         )
         tts_payload = await create_tts_payload(feedback_text)
-        response: Dict[str, object] = {"text": text}
+        response: Dict[str, object] = {
+            "text": text,
+            "normalized": normalization.to_dict(),
+            "candidates": normalization.candidates,
+        }
         if tts_payload:
             response["tts"] = tts_payload
         return response
@@ -464,7 +544,7 @@ async def log_voice(request: Request):
     if success:
         matched = body.get('matched_candidate', '')
         uci = body.get('uci', '')
-        print(f"   ✅ Parsed as: \"{matched}\" → {uci}")
+        # print(f"   ✅ Parsed as: \"{matched}\" → {uci}")
     else:
         candidates = body.get('candidates', [])
         cand_str = ', '.join(candidates) if candidates else 'none'
@@ -476,3 +556,10 @@ async def log_voice(request: Request):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+
+
+
+
+

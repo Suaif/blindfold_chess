@@ -121,6 +121,10 @@ body {
     cursor: pointer;
     font-weight: bold;
     transition: background-color 0.2s;
+    width: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .voice-move-button:hover {
@@ -162,6 +166,8 @@ body {
     font-size: 14px;
     background: #f7fafc;
     color: #2d3748;
+    min-width: 0;
+    max-width: 100%;
 }
 
 /* Move List Panel */
