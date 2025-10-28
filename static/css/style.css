@@ -6,7 +6,7 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(180deg, #cfe8ff 0%, #b6dcff 100%);
     min-height: 100vh;
     color: #333;
 }
@@ -14,7 +14,7 @@ body {
 .container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 20px;
+    padding: 16px;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -22,14 +22,16 @@ body {
 
 .header {
     text-align: center;
-    margin-bottom: 30px;
-    color: white;
+    margin-bottom: 20px;
+    color: black;
+    position: relative;
+    padding-top: 10px;
 }
 
 .header h1 {
     font-size: 2.5rem;
     margin-bottom: 10px;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    /* text-shadow: 2px 2px 4px rgba(0,0,0,0.3); */
 }
 
 .header p {
@@ -37,34 +39,187 @@ body {
     opacity: 0.9;
 }
 
+.logo-pair {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;               /* space between elements */
+  position: relative;
+}
+
+.logo-img {
+  width: 60px;
+  height: 60px;
+  display: block;
+  object-fit: contain;
+  opacity: 0.95;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.logo-img:hover {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.logo-pair h1 {
+  font-size: 2.4rem;
+  font-weight: 600;
+  margin: 0;
+}
+.theme-toggle {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.85);
+    color: #2d3748;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    z-index: 10;
+}
+
+.theme-toggle:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+}
+
+.theme-toggle:active {
+    transform: scale(0.97);
+}
+
+.icon-toggle {
+    right: 0;
+    border: none;
+    background: rgba(49, 130, 206, 0.18);
+    color: #2d3748;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.25rem;
+    transition: background 0.2s ease, transform 0.2s ease, color 0.2s ease;
+}
+
+.icon-toggle:hover {
+    background: rgba(49, 130, 206, 0.28);
+    transform: scale(1.05);
+}
+
+.icon-toggle:active {
+    transform: scale(0.95);
+}
+
+.icon-toggle:focus-visible {
+    outline: 3px solid #3182ce;
+    outline-offset: 2px;
+}
+
+.icon-glyph {
+    line-height: 1;
+    font-size: 1.2rem;
+}
+
+.audio-toggle {
+    background: rgba(72, 187, 120, 0.18);
+    color: #22543d;
+}
+
+.audio-toggle:hover {
+    background: rgba(72, 187, 120, 0.3);
+}
+
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .main-content {
     display: grid;
     grid-template-columns: 1fr 300px 450px;
-    gap: 20px;
+    gap: 16px;
     flex: 1;
-    min-height: 600px;
+    min-height: 520px;
 }
 
 .panel {
     background: white;
     border-radius: 15px;
-    padding: 20px;
+    padding: 16px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
     display: flex;
     flex-direction: column;
 }
 
 .panel h3 {
-    margin-bottom: 15px;
+    margin-bottom: 12px;
     color: #4a5568;
     border-bottom: 2px solid #e2e8f0;
-    padding-bottom: 10px;
+    padding-bottom: 8px;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 8px;
+}
+
+.panel-header h3 {
+    margin: 0;
+    padding: 0;
+    border: none;
+    color: inherit;
+}
+
+.panel-header .panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.board-header {
+    align-items: center;
+}
+
+.board-header .panel-actions {
+    display: flex;
 }
 
 /* Chessboard Panel */
 .chessboard-panel {
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 16px;
+}
+
+.board-controls-top {
+    width: 100%;
+    display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: center;   /* center everything */
+    position: relative;        /* so we can position the button absolutely */
+    margin-bottom: 8px;
 }
 
 #chessboard {
@@ -77,13 +232,16 @@ body {
 .manual-move-input {
     display: flex;
     gap: 10px;
-    margin-top: 12px;
+    margin-top: 8px;
     width: 100%;
     max-width: 500px;
+    align-items: center;
 }
 
 .manual-move-text {
-    flex: 1;
+    flex: 0 0 310px;
+    width: 310px;
+    max-width: 310px;
     padding: 10px;
     border: 2px solid #e2e8f0;
     border-radius: 8px;
@@ -105,6 +263,7 @@ body {
     cursor: pointer;
     font-weight: bold;
     transition: background-color 0.2s;
+    flex-shrink: 0;
 }
 
 .manual-move-button:hover {
@@ -153,7 +312,7 @@ body {
 .voice-controls-row {
     display: flex;
     gap: 10px;
-    margin-top: 10px;
+    margin-top: 6px;
     width: 100%;
     max-width: 500px;
 }
@@ -197,10 +356,31 @@ body {
     background-color: #e2e8f0;
 }
 
+.move-item.current {
+    background-color: #bee3f8;
+}
+
+.move-item.empty {
+    text-align: center;
+    color: #718096;
+    font-style: italic;
+}
+
 .move-number {
     font-weight: bold;
     color: #4a5568;
     margin-right: 8px;
+}
+
+.move-item .move {
+    display: inline-block;
+    min-width: 70px;
+    margin-right: 8px;
+}
+
+.move-item .move.active {
+    font-weight: bold;
+    color: #2b6cb0;
 }
 
 /* Chat Panel */
@@ -362,8 +542,8 @@ body {
 .game-controls {
     display: flex;
     gap: 10px;
-    margin-bottom: 20px;
-    padding: 15px;
+    margin-bottom: 16px;
+    padding: 12px;
     background: #f7fafc;
     border-radius: 8px;
     justify-content: center;
@@ -373,7 +553,7 @@ body {
     color: black;
     font-weight: bold;
     font-size: 18px; /* adjust size as needed */
-    margin-bottom: 10px; /* creates the jump line/space before buttons */
+    margin-bottom: 6px; /* creates the jump line/space before buttons */
 }
 .control-button {
     padding: 8px 16px;
@@ -382,6 +562,11 @@ body {
     cursor: pointer;
     font-weight: bold;
     transition: background-color 0.2s;
+}
+
+.control-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
 }
 
 .reset-button {
@@ -402,6 +587,219 @@ body {
     background: #2f855a;
 }
 
+.undo-button {
+    background: #3182ce;
+    color: white;
+    padding: 10px 16px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.undo-button:hover {
+    background: #2b6cb0;
+}
+
+.undo-button:disabled {
+    background: #a0aec0;
+    color: #edf2f7;
+}
+
+body.dark-mode {
+    background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+    color: #e2e8f0;
+}
+
+body.dark-mode .header {
+    color: #e2e8f0;
+}
+
+body.dark-mode .header p {
+    color: #cbd5f5;
+    opacity: 0.85;
+}
+
+body.dark-mode .logo-img {
+  filter: brightness(1.2);
+}
+body.dark-mode .theme-toggle {
+    background: rgba(15, 23, 42, 0.9);
+    color: #f8fafc;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+body.dark-mode .game-controls {
+    background: rgba(30, 41, 59, 0.85);
+    color: #e2e8f0;
+}
+
+body.dark-mode .game-controls p {
+    color: #f8fafc;
+}
+
+body.dark-mode .panel,
+body.dark-mode .setup-screen {
+    background: #1f2937;
+    color: #e2e8f0;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+body.dark-mode .panel h3,
+body.dark-mode .setup-screen h2 {
+    color: #f8fafc;
+    border-bottom-color: #2d3748;
+}
+
+body.dark-mode .panel-header {
+    border-bottom-color: #2d3748;
+}
+
+body.dark-mode .setup-group label {
+    color: #e2e8f0;
+}
+
+body.dark-mode .manual-move-text,
+body.dark-mode .chat-input,
+body.dark-mode .voice-text {
+    background: #111827;
+    color: #e2e8f0;
+    border-color: #2d3748;
+}
+
+body.dark-mode .manual-move-text::placeholder,
+body.dark-mode .chat-input::placeholder,
+body.dark-mode .voice-text::placeholder {
+    color: #94a3b8;
+}
+
+body.dark-mode .manual-move-button {
+    background: #2d3748;
+    color: #f8fafc;
+}
+
+body.dark-mode .manual-move-button:hover {
+    background: #4a5568;
+}
+
+body.dark-mode .undo-button {
+    background: #2b6cb0;
+    color: #f8fafc;
+}
+
+body.dark-mode .undo-button:hover {
+    background: #4299e1;
+}
+
+body.dark-mode .voice-model-select {
+    background: #1f2937;
+    color: #e2e8f0;
+    border: 2px solid #2d3748;
+}
+
+body.dark-mode .voice-move-button {
+    background: #6b46c1;
+    color: #f8fafc;
+}
+
+body.dark-mode .voice-move-button:hover {
+    background: #805ad5;
+}
+
+body.dark-mode .icon-toggle:focus-visible {
+    outline: 3px solid #63b3ed;
+}
+
+body.dark-mode .icon-toggle {
+    background: rgba(148, 163, 184, 0.2);
+    color: #f8fafc;
+}
+
+body.dark-mode .icon-toggle:hover {
+    background: rgba(148, 163, 184, 0.36);
+}
+
+body.dark-mode .audio-toggle {
+    background: rgba(56, 161, 105, 0.28);
+    color: #d1fae5;
+}
+
+body.dark-mode .audio-toggle:hover {
+    background: rgba(56, 161, 105, 0.44);
+}
+
+body.dark-mode .move-list,
+body.dark-mode .chat-messages {
+    background: #111827;
+    color: #e2e8f0;
+}
+
+body.dark-mode .chat-message.assistant {
+    background: #2d3748;
+    color: #f8fafc;
+}
+
+body.dark-mode .move-item:hover {
+    background-color: rgba(99, 179, 237, 0.15);
+}
+
+body.dark-mode .move-item.current {
+    background-color: rgba(99, 179, 237, 0.25);
+}
+
+body.dark-mode .move-number {
+    color: #cbd5f5;
+}
+
+body.dark-mode .move-item .move.active {
+    color: #63b3ed;
+}
+
+body.dark-mode .move-item.empty {
+    color: #94a3b8;
+}
+
+body.dark-mode .status-success {
+    background: rgba(56, 161, 105, 0.2);
+    color: #9ae6b4;
+    border-color: #38a169;
+}
+
+body.dark-mode .status-error {
+    background: rgba(229, 62, 62, 0.2);
+    color: #feb2b2;
+    border-color: #fc8181;
+}
+
+body.dark-mode .status-info {
+    background: rgba(59, 130, 246, 0.2);
+    color: #90cdf4;
+    border-color: #63b3ed;
+}
+
+body.dark-mode .toast {
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+body.dark-mode .color-option {
+    border-color: #2d3748;
+    background: #111827;
+    color: #e2e8f0;
+}
+
+body.dark-mode .color-option:hover {
+    border-color: #63b3ed;
+    background: rgba(99, 179, 237, 0.1);
+}
+
+body.dark-mode .color-option.selected {
+    border-color: #63b3ed;
+    background: #3182ce;
+    color: #ffffff;
+}
+
+body.dark-mode .chessboard-63f37 {
+    border: 3px solid #63b3ed;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.7);
+}
 /* Status Messages */
 .status-message {
     padding: 10px;
@@ -526,29 +924,6 @@ body {
 
 .hidden {
     display: none !important;
-}
-
-/* Piece visibility toggle styling */
-.board-controls-top,
-.board-controls-right {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 8px;
-}
-
-.piece-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    color: #2d3748;
-    cursor: pointer;
-}
-
-.piece-toggle input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
 }
 
 /* Hide chess pieces by targeting the chessboard image pieces inserted by Chessboard.js */

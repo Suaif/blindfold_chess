@@ -125,6 +125,30 @@ class GameState:
         except Exception as e:
             return False, str(e)
 
+    def undo_last_player_move(self):
+        if not self.board.move_stack:
+            return False, "No moves to undo."
+
+        # Determine how many plies to roll back so the player can choose a new move.
+        plies_to_undo = 1
+        if self.board.turn == self.player_color:
+            # Engine just moved; undo both the engine reply and the player's move.
+            plies_to_undo = 2 if len(self.board.move_stack) >= 2 else 1
+
+        undone = 0
+        while undone < plies_to_undo and self.board.move_stack:
+            self.board.pop()
+            if self.move_history:
+                self.move_history.pop()
+            undone += 1
+
+        if undone == 0:
+            return False, "No moves were undone."
+
+        # Reactivate the game if it was previously flagged as finished.
+        self.game_active = True
+        return True, undone
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Set[WebSocket] = set()
@@ -438,6 +462,23 @@ async def websocket_endpoint(websocket: WebSocket):
                     "fen": game_state.board.fen(),
                     "last_move": engine_result or result,
                     "move_history": game_state.move_history,
+                })
+
+            elif message_type == "undo":
+                success, undone = game_state.undo_last_player_move()
+                if not success:
+                    await manager.broadcast_to_client(websocket, {
+                        "type": "error",
+                        "message": undone
+                    })
+                    continue
+
+                await manager.broadcast_to_client(websocket, {
+                    "type": "position_update",
+                    "fen": game_state.board.fen(),
+                    "last_move": None,
+                    "move_history": game_state.move_history,
+                    "undo_count": undone,
                 })
             
             elif message_type == "chat":
