@@ -245,9 +245,16 @@ def san_to_spoken_text(san: str) -> str:
     """
     if not san:
         return ""
-    s = san.strip()
-    # Strip trailing annotations (check, mate, !, ?)
-    s = re.sub(r"[+#?!]+$", "", s)
+    s_orig = san.strip()
+    # Detect trailing check/mate
+    is_mate = False
+    is_check = False
+    if re.search(r"[#]$", s_orig):
+        is_mate = True
+    elif re.search(r"[+]+$", s_orig):
+        is_check = True
+    # Strip trailing annotations (keep info in flags)
+    s = re.sub(r"[+#?!]+$", "", s_orig)
     # Castling
     if s.upper().startswith("O-O-O"):
         return "castle queen side"
@@ -261,18 +268,40 @@ def san_to_spoken_text(san: str) -> str:
     if pm:
         piece = PIECE_WORDS_SPOKEN.get(pm.group(1).upper(), "").lower()
         if piece:
-            return f"{dest} promotes to {piece}"
+            spoken = f"{dest} promotes to {piece}"
+            if is_mate:
+                return spoken + " checkmate"
+            if is_check:
+                return spoken + " check"
+            return spoken
 
     is_capture = "x" in s
     first = s[0].upper()
     if first in PIECE_WORDS_SPOKEN:
         name = PIECE_WORDS_SPOKEN[first]
-        return f"{name} takes {dest}" if is_capture else f"{name} {dest}"
+        base = f"{name} takes {dest}" if is_capture else f"{name} {dest}"
+        if is_mate:
+            return base + " checkmate"
+        if is_check:
+            return base + " check"
+        return base
 
     # Pawn moves
     if is_capture:
-        return f"pawn takes {dest}"
-    return dest
+        # For pawn captures, speak file letter: e.g., 'exd5' -> 'e takes d5'
+        mfile = re.match(r"^([a-h])x", s, flags=re.IGNORECASE)
+        if mfile:
+            file_letter = mfile.group(1).lower()
+            base = f"{file_letter} takes {dest}"
+        else:
+            base = f"pawn takes {dest}"
+    else:
+        base = dest
+    if is_mate:
+        return base + " checkmate"
+    if is_check:
+        return base + " check"
+    return base
 
 
 SAN_PATTERN = re.compile(r"^[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?$", re.IGNORECASE)
@@ -301,6 +330,59 @@ def candidate_to_spoken_text(candidate: str) -> str:
 
     return c
 
+
+def chat_text_to_spoken(text: Optional[str]) -> Optional[str]:
+    """Convert SAN/notation inside free-form chat text to spoken form.
+
+    Keeps the printable text the same for chat, but returns a version
+    better suited for TTS (e.g., 'Bd5' -> 'bishop d5', 'Qxe7' -> 'queen takes e7').
+    """
+    if text is None:
+        return None
+    s = str(text)
+    if not s.strip():
+        return s
+
+    suffix_punct = ",.;:!?)\]}"  # '+' and '#' are handled by SAN converter
+    prefix_punct = "([{"
+
+    def to_spoken_token(tok: str) -> str:
+        if not tok:
+            return tok
+        pre = ""
+        post = ""
+        # peel prefix punctuation
+        while tok and tok[0] in prefix_punct:
+            pre += tok[0]
+            tok = tok[1:]
+        # peel suffix punctuation
+        while tok and tok[-1] in suffix_punct:
+            post = tok[-1] + post
+            tok = tok[:-1]
+        core = tok
+        spoken = core
+        if core:
+            if core.upper().startswith("O-O"):
+                spoken = san_to_spoken_text(core)
+            else:
+                # Try SAN match on trimmed token (allow trailing +/#)
+                trimmed = re.sub(r"[+#?!]+$", "", core)
+                if SAN_PATTERN.match(trimmed):
+                    spoken = san_to_spoken_text(core)
+                elif UCI_PATTERN.match(core):
+                    if len(core) == 5:
+                        promo_piece = PIECE_WORDS_SPOKEN.get(core[4].upper(), core[4].lower())
+                        spoken = f"{core[2:4].lower()} promotes to {promo_piece}"
+                    else:
+                        spoken = core[2:4].lower()
+        return pre + spoken + post
+
+    try:
+        tokens = s.split()
+        converted = [to_spoken_token(t) for t in tokens]
+        return " ".join(converted)
+    except Exception:
+        return s
 
 async def send_tts_message(websocket: WebSocket, text: Optional[str], voice: Optional[str] = None):
     payload = await create_tts_payload(text, voice=voice)
@@ -495,6 +577,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     "user_message": user_message,
                     "ai_response": response
                 })
+                # Also speak the assistant's response via TTS (if configured),
+                # converting any SAN moves to a spoken-friendly form.
+                try:
+                    spoken = chat_text_to_spoken(response)
+                    await send_tts_message(websocket, spoken)
+                except Exception as tts_err:
+                    print(f"TTS error for chat response: {tts_err}")
     
     except WebSocketDisconnect:
         manager.disconnect(websocket)

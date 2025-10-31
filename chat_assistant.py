@@ -2,12 +2,14 @@ import ollama
 import chess
 import re
 import random
+from typing import Optional, Dict, Any
 
 class ChatAssistant:
     def __init__(self):
         self.ollama_client = ollama.Client()
-        # Store the expected answer to the last test question asked (if any)
-        self.pending_test: list[str, str] | None = None
+        # Store info about the last TEST question asked (if any)
+        # Structure: {'type': str, 'question': str, 'answer': str}
+        self.pending_test: Optional[Dict[str, Any]] = None
     
     def generate_recap(self, game_state):
         moves = game_state.move_history
@@ -32,26 +34,33 @@ class ChatAssistant:
         test_questions = ["checks", "captures", "where", "what"]
         if question_type == "none":
             question_type = random.choice(test_questions)
+        # Resolve color to a normalized string we can use throughout
         if color == "none":
             white_or_black = random.choice(["white", "black"])
+        else:
+            white_or_black = "white" if str(color).lower() == "white" else "black"
                 
         if question_type == "checks":
             question = f"How many checks has {white_or_black} now?"
             n, checks = 0, []
-            for move in board.legal_moves:
-                san = board.san(move)
-                board.push(move)
-                if board.is_check():
+            b = board.copy()
+            b.turn = chess.WHITE if white_or_black == "white" else chess.BLACK
+            for move in list(b.legal_moves):
+                san = b.san(move)
+                b.push(move)
+                if b.is_check():
                     n += 1
                     checks.append(san)
-                board.pop()
+                b.pop()
             answer = f"{n} checks: {', '.join(checks)}"
         elif question_type == "captures":
             question = f"How many captures has {white_or_black} now?"
             n, captures = 0, []
-            for move in board.legal_moves:
-                san = board.san(move)
-                if board.is_capture(move):
+            b = board.copy()
+            b.turn = chess.WHITE if white_or_black == "white" else chess.BLACK
+            for move in list(b.legal_moves):
+                san = b.san(move)
+                if b.is_capture(move):
                     n += 1
                     captures.append(san)
             answer = f"{n} captures: {', '.join(captures)}"
@@ -66,8 +75,8 @@ class ChatAssistant:
                 "knight": chess.KNIGHT
             }
             
-            # Determine color
-            color = chess.WHITE if white_or_black == "white" else chess.BLACK
+            # Determine color flag for python-chess
+            color_flag = chess.WHITE if white_or_black == "white" else chess.BLACK
             
             # Get the piece type constant
             piece_const = piece_map[piece]
@@ -76,7 +85,7 @@ class ChatAssistant:
                 question = f"Where is the {white_or_black} {piece}?"
                 
                 # Find the piece on the board
-                pieces = board.pieces(piece_const, color)
+                pieces = board.pieces(piece_const, color_flag)
                 if pieces:
                     answer = chess.square_name(pieces.pop())
                 else:
@@ -86,17 +95,17 @@ class ChatAssistant:
                 question = f"Where is one of the {white_or_black} {piece}s?"
                 
                 # Find all pieces of this type
-                pieces = board.pieces(piece_const, color)
+                pieces = board.pieces(piece_const, color_flag)
                 answer_list = [chess.square_name(sq) for sq in pieces]
                 
                 if len(answer_list) == 0:
-                    answer = f"There is no {white_or_black} {piece_type}"
+                    answer = f"There is no {white_or_black} {piece}"
                 elif len(answer_list) == 1:
                     answer = answer_list[0]
                 else:
                     answer = ", ".join(answer_list)
             
-            return question, answer
+            return question, (answer.lower() if isinstance(answer, str) else answer)
 
 
         elif question_type == "what":
@@ -128,6 +137,69 @@ class ChatAssistant:
                 piece_name = piece_names[piece.piece_type]
                 answer = f"{color_name} {piece_name}"
         return question, answer
+    
+    def _parse_int_from_text(self, text: str) -> Optional[int]:
+        """Parse an integer from free-form English (e.g., 'four', '4')."""
+        s = (text or "").strip().lower()
+        if not s:
+            return None
+        m = re.search(r"\d+", s)
+        if m:
+            try:
+                return int(m.group(0))
+            except Exception:
+                pass
+        # Map number words and common homophones to integers
+        words = {
+            "zero": 0, "oh": 0, "owe": 0,
+            "one": 1, "won": 1,
+            "two": 2, "too": 2, "to": 2, "tu": 2,
+            "three": 3, "tree": 3, "free": 3,
+            "four": 4, "for": 4, "fore": 4,
+            "five": 5, "fife": 5,
+            "six": 6,
+            "seven": 7,
+            "eight": 8, "ate": 8, "ait": 8,
+            "nine": 9,
+            "ten": 10,
+            "eleven": 11,
+            "twelve": 12,
+            "thirteen": 13,
+            "fourteen": 14,
+            "fifteen": 15,
+            "sixteen": 16,
+            "seventeen": 17,
+            "eighteen": 18,
+            "nineteen": 19,
+            "twenty": 20,
+        }
+        tokens = re.findall(r"[a-z]+", s)
+        for t in tokens:
+            if t in words:
+                return words[t]
+        return None
+
+    def _normalize_number_words_to_digits(self, text: str) -> str:
+        """Replace standalone number words and homophones with digits (e.g., 'for' -> '4')."""
+        if not text:
+            return text
+        s = str(text)
+        mapping = {
+            "zero": "0", "oh": "0", "owe": "0",
+            "one": "1", "won": "1",
+            "two": "2", "too": "2", "to": "2", "tu": "2",
+            "three": "3", "tree": "3", "free": "3",
+            "four": "4", "for": "4", "fore": "4",
+            "five": "5", "fife": "5",
+            "six": "6",
+            "seven": "7",
+            "eight": "8", "ate": "8", "ait": "8",
+            "nine": "9",
+        }
+        def repl(m: re.Match) -> str:
+            w = m.group(0)
+            return mapping.get(w.lower(), w)
+        return re.sub(r"\b[a-z]+\b", repl, s)
     
     def get_piece_position(self, board, color_str, piece_str):
         """
@@ -194,21 +266,41 @@ class ChatAssistant:
                     question_type = "what"
                     
                 question, answer = self.generate_test_question(game_state, color, question_type)
-                # Normalise the stored answer for easy comparison later.
-                self.pending_test = [question, answer]
+                # Store the new test in structured form
+                self.pending_test = {"type": question_type, "question": question, "answer": answer}
                 return f"TEST QUESTION: {question}"
             
             try:
+                pt = self.pending_test or {}
+                qtype = (pt.get("type") or "").lower()
+                # Numeric evaluation for checks/captures: expect only a number as answer
+                if qtype in ("checks", "captures"):
+                    # Expected number is the first integer in the stored answer string
+                    expected = None
+                    m = re.match(r"\s*(\d+)", str(pt.get("answer") or ""))
+                    if m:
+                        expected = int(m.group(1))
+                    user_n = self._parse_int_from_text(message)
+                    if expected is not None and user_n is not None:
+                        correct = (user_n == expected)
+                        verdict = "Correct" if correct else f"Incorrect. It is {expected}."
+                        detailed = str(pt.get("answer") or "")
+                        self.pending_test = None
+                        return f"{verdict}\n({detailed})"
+
+                # Fallback to LLM-based brief evaluation for other test types
                 system_prompt = f"""
                 You are a helpful chess training assistant and you need to evaluate the user's answer to the test question.
                 
-                The question is: {self.pending_test[0]}
+                The question is: {pt.get('question')}
                               
-                The correct answer is: {self.pending_test[1]}
+                The correct answer is: {pt.get('answer')}
                 
                 Answer very briefly and directly: Correct/Incorrect
                 """
-                user_message = f"User's answer: {message}"
+                # Normalize numeric homophones so the LLM sees canonical digits
+                normalized_msg = self._normalize_number_words_to_digits(message)
+                user_message = f"User's answer: {normalized_msg}"
 
                 response = self.ollama_client.chat(
                     model='llama3.2:3b',
@@ -217,8 +309,8 @@ class ChatAssistant:
                         {'role': 'user', 'content': user_message}
                     ]
                 )
-                answer = response['message']['content'] + "\n (Correct answer: " + self.pending_test[1] + ")"
-                self.pending_test = None  # reset state
+                answer = f"{response['message']['content']}\n ({pt.get('answer')})"
+                self.pending_test = None
                 return answer
             except Exception as e:
                 return f"I'm having trouble processing that question {e}. Please try again."
@@ -245,10 +337,13 @@ class ChatAssistant:
                 question_type = "where"
             elif "what" in message:
                 question_type = "what"
+            # If not specified, pick a random type here so we can store it
+            if question_type == "none":
+                question_type = random.choice(["checks", "captures", "where", "what"])            
             
             question, answer = self.generate_test_question(game_state, color, question_type)
-            # Normalise the stored answer for easy comparison later.
-            self.pending_test = [question, answer]
+            # Store structured pending test for later evaluation
+            self.pending_test = {"type": question_type, "question": question, "answer": answer}
             return f"TEST QUESTION: {question}"
         elif "where" in message:
             color = "white" if "white" in message else "black"

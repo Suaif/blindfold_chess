@@ -111,6 +111,7 @@ PIECE_WORDS: Dict[str, str] = {
     "queen": "Q",
     "quin": "Q",
     "king": "K",
+    "keying": "K",
 }
 
 ACTION_WORDS: Dict[str, str] = {

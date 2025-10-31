@@ -21,6 +21,7 @@ class BlindfoldChessApp {
         this.boundKeyHandler = null;
         this.darkMode = false;
         this.ttsEnabled = true;
+        this.awaitingTestAnswer = false; // awaiting spoken answer to TEST
         
         this.initializeApp();
     }
@@ -122,6 +123,15 @@ class BlindfoldChessApp {
             case 'chat_response':
                 this.addChatMessage(message.user_message, 'user');
                 this.addChatMessage(message.ai_response, 'assistant');
+                // Update state for spoken Q/A flow
+                try {
+                    const resp = (message.ai_response || '').toString();
+                    if (resp.toUpperCase().startsWith('TEST QUESTION:')) {
+                        this.awaitingTestAnswer = true;
+                    } else if (/\bCorrect answer:\b/i.test(resp) || /\bCorrect\b|\bIncorrect\b/.test(resp)) {
+                        this.awaitingTestAnswer = false;
+                    }
+                } catch {}
                 break;
                 
             case 'error':
@@ -246,7 +256,15 @@ class BlindfoldChessApp {
                 return isCapture ? `${name} takes ${dest}` : `${name} ${dest}`;
             }
 
-            return isCapture ? `pawn takes ${dest}` : dest;
+            // Pawn moves: on capture use file letter (e.g., 'exd5' -> 'e takes d5')
+            if (isCapture) {
+                const m = s.match(/^([a-h])x/i);
+                if (m) {
+                    return `${m[1].toLowerCase()} takes ${dest}`;
+                }
+                return `pawn takes ${dest}`;
+            }
+            return dest;
         };
 
         const currentFen = this.game ? this.game.fen() : undefined;
@@ -289,7 +307,11 @@ class BlindfoldChessApp {
                     <button type="button" class="theme-toggle" id="themeToggle">
                         <span class="sr-only">Toggle dark mode</span>
                     </button>
-                    <h1>Blindfold Chess Training</h1>
+                    <div class="logo-pair">
+                        <img src="/static/icons/white_horse_right-removebg.png" class="logo-img left" alt="" aria-hidden="true">
+                        <h1>Blindfold Chess Training</h1>
+                        <img src="/static/icons/white_horse_left-removebg.png" class="logo-img right" alt="" aria-hidden="true">
+                    </div>
                 </div>
                 <div class="setup-screen">
                     <h2>Game Setup</h2>
@@ -374,9 +396,9 @@ class BlindfoldChessApp {
                         <span class="sr-only">Toggle dark mode</span>
                     </button>
                     <div class="logo-pair">
-                        <img src="/static/icons/black_horse_right.png" class="logo-img left" alt="" aria-hidden="true">
+                        <img src="/static/icons/white_horse_right-removebg.png" class="logo-img left" alt="" aria-hidden="true">
                         <h1>Blindfold Chess Training</h1>
-                        <img src="/static/icons/black_horse_left.png" class="logo-img right" alt="" aria-hidden="true">
+                        <img src="/static/icons/white_horse_left-removebg.png" class="logo-img right" alt="" aria-hidden="true">
                     </div>
                 </div>
                 
@@ -1191,14 +1213,20 @@ class BlindfoldChessApp {
         this.isListening = true;
         const voiceText = document.getElementById('voiceText');
         const btn = document.getElementById('voiceMoveButton');
-        if (btn) btn.textContent = 'Stop';
+        if (btn) {
+            btn.textContent = 'Stop';
+            btn.classList.add('is-recording');
+        }
         if (voiceText) voiceText.value = 'Recording...';
         try {
             this.recorder = new LocalRecorder();
             await this.recorder.start();
         } catch (e) {
             this.isListening = false;
-            if (btn) btn.textContent = 'Record';
+            if (btn) {
+                btn.textContent = 'Record';
+                btn.classList.remove('is-recording');
+            }
             if (voiceText) voiceText.value = 'Mic error';
             return this.showStatusMessage('Failed to start recording: ' + e, 'error');
         }
@@ -1209,7 +1237,10 @@ class BlindfoldChessApp {
         this.isListening = false;
         const voiceText = document.getElementById('voiceText');
         const btn = document.getElementById('voiceMoveButton');
-        if (btn) btn.textContent = 'Record';
+        if (btn) {
+            btn.textContent = 'Record';
+            btn.classList.remove('is-recording');
+        }
         if (voiceText) voiceText.value = 'Processing...';
 
         try {
@@ -1226,8 +1257,21 @@ class BlindfoldChessApp {
             const res = await fetch('/stt', { method: 'POST', body: form });
             if (!res.ok) throw new Error('STT request failed');
             const data = await res.json();
+            const sttText = (data && typeof data.text === 'string') ? data.text : '';
+            if (voiceText) voiceText.value = sttText;
+
+            // Route "recap"/"test" or pending test answers to chat assistant
+            const chatMessage = this.parseChatVoiceCommand(sttText);
+            if (this.awaitingTestAnswer || chatMessage) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    const msg = this.awaitingTestAnswer ? sttText : chatMessage;
+                    this.ws.send(JSON.stringify({ type: 'chat', message: msg }));
+                }
+                // Skip generic STT feedback for commands/answers to avoid overlap
+                return;
+            }
+
             if (data.tts) this.playTts(data.tts);
-            if (voiceText) voiceText.value = data.text || '';
             this.handleSpokenMove(data);
         } catch (e) {
             if (voiceText) voiceText.value = 'STT error';
@@ -1235,6 +1279,30 @@ class BlindfoldChessApp {
         } finally {
             this.recorder = null;
         }
+    }
+
+    // Detect voice-driven chat commands from STT text
+    parseChatVoiceCommand(text) {
+        if (!text) return null;
+        const s = String(text).trim().toLowerCase();
+        if (!s) return null;
+
+        // Direct recap
+        if (s === 'recap' || s.includes('recap')) return 'recap';
+
+        // Test variants
+        if (s === 'test' || s.startsWith('test ')) {
+            if (/(check|checks)/.test(s)) return 'test checks';
+            if (/(capture|captures)/.test(s)) return 'test captures';
+            if (/\bwhere\b/.test(s)) return 'test where';
+            if (/\bwhat\b/.test(s)) return 'test what';
+            return 'test';
+        }
+
+        // Natural questions to assistant
+        if (s.startsWith('where ') || s.startsWith('what ')) return text.trim();
+
+        return null;
     }
 
     

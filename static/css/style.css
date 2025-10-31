@@ -43,14 +43,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;               /* space between elements */
+  gap: 16px;
   position: relative;
 }
 
 .logo-img {
   width: 60px;
   height: 60px;
-  display: block;
   object-fit: contain;
   opacity: 0.95;
   transition: transform 0.3s ease, opacity 0.3s ease;
@@ -65,6 +64,7 @@ body {
   font-size: 2.4rem;
   font-weight: 600;
   margin: 0;
+  color: #1e293b;        /* dark text for light mode */
 }
 .theme-toggle {
     position: absolute;
@@ -295,6 +295,21 @@ body {
     cursor: not-allowed;
 }
 
+/* Recording state feedback */
+.voice-move-button.is-recording {
+    background-color: #ff7aa8; /* vivid pink */
+    color: #fff;
+    border-color: #ff86a0;
+    box-shadow: 0 0 0 3px rgba(255, 192, 203, 0.35);
+    animation: recordingPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes recordingPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+    100% { transform: scale(1); }
+}
+
 .voice-status {
     margin-left: 8px;
     color: #4a5568;
@@ -331,11 +346,11 @@ body {
 
 /* Move List Panel */
 .move-list-panel {
-    min-height: 400px;
+    min-height: 600px;
 }
 
 .move-list {
-    height: 500px; /* fixed height */
+    height: 600px; /* fixed height */
     overflow-y: auto;
     padding: 10px;
     background: #f7fafc;
@@ -385,7 +400,7 @@ body {
 
 /* Chat Panel */
 .chat-panel {
-    min-height: 400px;
+    min-height: 600px;
 }
 
 .chat-messages {
@@ -394,26 +409,33 @@ body {
     background: #f7fafc;
     border-radius: 8px;
     margin-bottom: 15px;
-    height: 500px; /* fixed height */
+    height: 600px; /* fixed height */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* prevent stretching to full width */
+    gap: 8px;
 }
 
 .chat-message {
-    margin-bottom: 12px;
+    margin-bottom: 0; /* handled by container gap */
     padding: 8px 12px;
     border-radius: 8px;
-    max-width: 90%;
+    max-width: 90%; /* keep current maximum width */
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
 }
 
 .chat-message.user {
     background: #3182ce;
     color: white;
-    margin-left: auto;
+    align-self: flex-end; /* right align without taking full width */
     text-align: right;
 }
 
 .chat-message.assistant {
     background: #e2e8f0;
     color: #2d3748;
+    align-self: flex-start;
 }
 
 .chat-input-container {
@@ -621,6 +643,17 @@ body.dark-mode .header p {
 body.dark-mode .logo-img {
   filter: brightness(1.2);
 }
+body.dark-mode .logo-img.left {
+  content: url('/static/icons/black_horse_left-removebg.png');
+}
+
+body.dark-mode .logo-img.right {
+  content: url('/static/icons/black_horse_right-removebg.png');
+}
+
+body.dark-mode .logo-pair h1 {
+  color: #f8fafc;        /* light text for dark background */
+}
 body.dark-mode .theme-toggle {
     background: rgba(15, 23, 42, 0.9);
     color: #f8fafc;
@@ -702,6 +735,14 @@ body.dark-mode .voice-move-button {
 
 body.dark-mode .voice-move-button:hover {
     background: #805ad5;
+}
+
+/* Dark mode recording state */
+body.dark-mode .voice-move-button.is-recording {
+    background-color: #ff4f89;
+    color: #fff;
+    border-color: #ff6f9e;
+    box-shadow: 0 0 0 3px rgba(255, 99, 132, 0.35);
 }
 
 body.dark-mode .icon-toggle:focus-visible {
