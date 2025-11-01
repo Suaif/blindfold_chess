@@ -228,86 +228,81 @@ body {
     margin: 0 auto;
 }
 
-/* Manual move input under the board */
-.manual-move-input {
-    display: flex;
-    gap: 10px;
-    margin-top: 8px;
+/* Manual move UI removed */
+
+/* Board actions: 3 circular buttons under the board */
+.board-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    align-items: center;
+    justify-items: center;
+    gap: 14px;
     width: 100%;
     max-width: 500px;
-    align-items: center;
+    margin: 8px auto 4px;
 }
 
-.manual-move-text {
-    flex: 0 0 310px;
-    width: 310px;
-    max-width: 310px;
-    padding: 10px;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    font-size: 14px;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-.manual-move-text:focus {
-    border-color: #3182ce;
-}
-
-.manual-move-button {
-    padding: 10px 16px;
-    background: #4a5568;
-    color: white;
+.circle-btn { 
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
     border: none;
-    border-radius: 8px;
     cursor: pointer;
-    font-weight: bold;
-    transition: background-color 0.2s;
-    flex-shrink: 0;
-}
-
-.manual-move-button:hover {
-    background: #2d3748;
-}
-
-/* Voice input button and status */
-.voice-move-button {
-    padding: 10px 12px;
-    background: #805ad5;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: bold;
-    transition: background-color 0.2s;
-    width: 120px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-}
-
-.voice-move-button:hover {
-    background: #6b46c1;
-}
-
-.voice-move-button:disabled {
-    background: #b794f4;
-    cursor: not-allowed;
-}
-
-/* Recording state feedback */
-.voice-move-button.is-recording {
-    background-color: #ff7aa8; /* vivid pink */
     color: #fff;
-    border-color: #ff86a0;
-    box-shadow: 0 0 0 3px rgba(255, 192, 203, 0.35);
+    font-size: 24px;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+    transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, filter 0.2s ease;
+    user-select: none;
+}
+.circle-btn:focus-visible { outline: 3px solid rgba(99,179,237,0.9); outline-offset: 2px; }
+
+.circle-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,0,0,0.22); }
+.circle-btn:active { transform: translateY(0); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
+.circle-btn:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(0.3); }
+
+/* Specific button themes */
+.record-btn {
+    background: linear-gradient(135deg, #00ff73, #00cc44); /* vivid emerald green */
+}
+
+.undo-btn {
+    background: linear-gradient(135deg, #1a8cff, #0056ff); /* bright cobalt blue */
+}
+
+.convo-btn {
+    background: linear-gradient(135deg, #a020f0, #6a00ff); /* vibrant purple for consistency */
+    color: #ffffff;
+}
+
+.voice-move-button.is-recording {
+    background: linear-gradient(135deg, #ff3366, #ff6f91);
     animation: recordingPulse 1.2s ease-in-out infinite;
 }
 
+
 @keyframes recordingPulse {
     0% { transform: scale(1); }
-    50% { transform: scale(1.03); }
+    50% { transform: scale(1.04); }
     100% { transform: scale(1); }
+}
+
+.btn-icon { line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.btn-icon svg { display: block; }
+
+.voice-text-row {
+    width: 100%;
+    max-width: 500px;
+    margin: 6px auto 0;
+    display: flex;
+    justify-content: center;
+}
+.voice-text-row .voice-text {
+    width: 70%;
+    max-width: 360px;
+    flex: 0 0 auto;
 }
 
 .voice-status {
@@ -316,13 +311,7 @@ body {
     align-self: center;
 }
 
-.voice-model-select {
-    padding: 8px 10px;
-    border: 2px solid #e2e8f0;
-    border-radius: 8px;
-    background: white;
-    color: #2d3748;
-}
+/* Voice model dropdown removed */
 
 .voice-controls-row {
     display: flex;
@@ -690,7 +679,6 @@ body.dark-mode .setup-group label {
     color: #e2e8f0;
 }
 
-body.dark-mode .manual-move-text,
 body.dark-mode .chat-input,
 body.dark-mode .voice-text {
     background: #111827;
@@ -698,20 +686,12 @@ body.dark-mode .voice-text {
     border-color: #2d3748;
 }
 
-body.dark-mode .manual-move-text::placeholder,
 body.dark-mode .chat-input::placeholder,
 body.dark-mode .voice-text::placeholder {
     color: #94a3b8;
 }
 
-body.dark-mode .manual-move-button {
-    background: #2d3748;
-    color: #f8fafc;
-}
-
-body.dark-mode .manual-move-button:hover {
-    background: #4a5568;
-}
+/* Manual move button removed */
 
 body.dark-mode .undo-button {
     background: #2b6cb0;
@@ -722,28 +702,26 @@ body.dark-mode .undo-button:hover {
     background: #4299e1;
 }
 
-body.dark-mode .voice-model-select {
-    background: #1f2937;
-    color: #e2e8f0;
-    border: 2px solid #2d3748;
-}
+/* Voice model dropdown removed */
 
 body.dark-mode .voice-move-button {
-    background: #6b46c1;
     color: #f8fafc;
 }
 
 body.dark-mode .voice-move-button:hover {
-    background: #805ad5;
+    filter: brightness(1.1);
 }
 
 /* Dark mode recording state */
 body.dark-mode .voice-move-button.is-recording {
-    background-color: #ff4f89;
     color: #fff;
-    border-color: #ff6f9e;
     box-shadow: 0 0 0 3px rgba(255, 99, 132, 0.35);
 }
+
+/* Dark mode for circle buttons */
+body.dark-mode .record-btn { filter: brightness(0.95); }
+body.dark-mode .undo-btn { filter: brightness(0.95); }
+body.dark-mode .convo-btn { filter: brightness(0.95); }
 
 body.dark-mode .icon-toggle:focus-visible {
     outline: 3px solid #63b3ed;

@@ -33,6 +33,9 @@ class BlindfoldChessApp {
         this._boardDomHandlersAttached = false;
         this._globalContextMenuAttached = false;
         this._boardObserver = null;
+        // STT configuration (model selection moved from UI to code)
+        this.sttBackend = 'whisper'; // 'whisper' or 'vosk'
+        this.sttModel = 'small';     // e.g., 'small', 'medium', 'large' or 'auto'
         
         this.initializeApp();
     }
@@ -477,19 +480,25 @@ class BlindfoldChessApp {
                             </div>
                         </div>
                         <div id="chessboard"></div>
-                        <div class="manual-move-input">
-                            <input type="text" id="manualMoveInput" class="manual-move-text" placeholder="Type your move (e.g., e2e4, Nf3, O-O, e8=Q)">
-                            <button id="manualMoveButton" class="manual-move-button">Play</button>
-                            <button class="control-button undo-button" id="undoButton" title="Undo your last move">Undo</button>
+                        <div class="board-actions">
+                            <button id="convoModeButton" class="circle-btn convo-btn" title="Conversational mode (coming soon)" aria-label="Conversational mode (coming soon)">
+                                <span class="btn-icon" aria-hidden="true">
+                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true">
+                                        <path d="M20 2H4a2 2 0 0 0-2 2v14l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
+                                    </svg>
+                                </span>
+                                <span class="sr-only">Conversational mode (coming soon)</span>
+                            </button>
+                            <button id="voiceMoveButton" class="circle-btn voice-move-button record-btn" title="Record" aria-label="Record" aria-pressed="false">
+                                <span class="btn-icon" aria-hidden="true">🎙️</span>
+                                <span class="sr-only">Record</span>
+                            </button>
+                            <button id="undoButton" class="circle-btn undo-btn" title="Undo your last move" aria-label="Undo last move">
+                                <span class="btn-icon" aria-hidden="true">↶</span>
+                                <span class="sr-only">Undo move</span>
+                            </button>
                         </div>
-                        <div class="voice-controls-row">
-                            <select id="voiceModelSelect" class="voice-model-select" title="Choose STT backend and model">
-                                <option value="vosk.large">Vosk Large</option>
-                                <option value="vosk.small">Vosk Small</option>
-                                <option value="whisper.small" selected>Whisper Small</option>
-                                <option value="whisper.medium">Whisper Medium</option>
-                            </select>
-                            <button id="voiceMoveButton" class="voice-move-button" title="Record or stop">Record</button>
+                        <div class="voice-text-row">
                             <input type="text" id="voiceText" class="voice-text" placeholder="Recognition output..." readonly>
                         </div>
                     </div>
@@ -539,7 +548,6 @@ class BlindfoldChessApp {
                 this.showSetupScreen();
             });
         }
-        
         // Chat input
         const chatInput = document.getElementById('chatInput');
         const sendButton = document.getElementById('sendButton');
@@ -587,24 +595,8 @@ class BlindfoldChessApp {
             });
         }
 
-        // Manual move input
-        const manualInput = document.getElementById('manualMoveInput');
-        const manualButton = document.getElementById('manualMoveButton');
-        const submitManual = () => {
-            const mv = manualInput.value.trim();
-            if (!mv) return;
-            this.submitManualMove(mv);
-        };
-        if (manualButton) manualButton.addEventListener('click', submitManual);
-        if (manualInput) manualInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                submitManual();
-            }
-        });
-
         // Voice input button
         const voiceBtn = document.getElementById('voiceMoveButton');
-        const voiceModelSelect = document.getElementById('voiceModelSelect');
         if (voiceBtn) {
             voiceBtn.addEventListener('click', () => {
                 if (this.isListening) {
@@ -612,6 +604,13 @@ class BlindfoldChessApp {
                 } else {
                     this.startLocalRecording();
                 }
+            });
+        }
+        const convoBtn = document.getElementById('convoModeButton');
+        if (convoBtn) {
+            convoBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.showStatusMessage('Conversational mode is coming soon.', 'info');
             });
         }
 
@@ -1238,10 +1237,6 @@ class BlindfoldChessApp {
             source: source
         }));
 
-        // Clear input
-        const manualInput = document.getElementById('manualMoveInput');
-        if (manualInput) manualInput.value = '';
-
         // Local move succeeded: play immediate sound and mark to suppress duplicate
         this.playMoveSound();
         this.playedLocalMoveSound = true;
@@ -1505,10 +1500,7 @@ class BlindfoldChessApp {
     }
     
     updateGameControls() {
-        const manualInput = document.getElementById('manualMoveInput');
-        const manualButton = document.getElementById('manualMoveButton');
         const voiceBtn = document.getElementById('voiceMoveButton');
-        const voiceModelSelect = document.getElementById('voiceModelSelect');
         const undoButton = document.getElementById('undoButton');
 
         const connected = !!(this.ws && this.ws.readyState === WebSocket.OPEN);
@@ -1520,25 +1512,8 @@ class BlindfoldChessApp {
         const minHistory = this.playerColor === 'white' ? 1 : 2;
         const hasUndo = historyLength >= minHistory;
 
-        if (manualInput) manualInput.disabled = !canMove;
-        if (manualButton) manualButton.disabled = !canMove;
         if (voiceBtn) voiceBtn.disabled = !canMove;
         if (undoButton) undoButton.disabled = !(connected && isActive && hasUndo);
-        if (voiceModelSelect) voiceModelSelect.disabled = false;
-
-        if (manualInput) {
-            if (!isActive) {
-                manualInput.placeholder = 'Start a game to enter moves';
-            } else if (!connected) {
-                manualInput.placeholder = 'Connecting...';
-            } else if (!viewingLive) {
-                manualInput.placeholder = 'Viewing history (press Right Arrow to resume live board)';
-            } else if (!playerTurn) {
-                manualInput.placeholder = "Waiting for opponent's move";
-            } else {
-                manualInput.placeholder = 'Type your move (e.g., e2e4, Nf3, O-O, e8=Q)';
-            }
-        }
     }
 
     // ---- Local recording for server-side STT (e.g., Vosk/Whisper) ----
@@ -1555,8 +1530,9 @@ class BlindfoldChessApp {
         const voiceText = document.getElementById('voiceText');
         const btn = document.getElementById('voiceMoveButton');
         if (btn) {
-            btn.textContent = 'Stop';
             btn.classList.add('is-recording');
+            btn.setAttribute('aria-pressed', 'true');
+            btn.setAttribute('title', 'Stop');
         }
         if (voiceText) voiceText.value = 'Recording...';
         try {
@@ -1565,8 +1541,9 @@ class BlindfoldChessApp {
         } catch (e) {
             this.isListening = false;
             if (btn) {
-                btn.textContent = 'Record';
                 btn.classList.remove('is-recording');
+                btn.setAttribute('aria-pressed', 'false');
+                btn.setAttribute('title', 'Record');
             }
             if (voiceText) voiceText.value = 'Mic error';
             return this.showStatusMessage('Failed to start recording: ' + e, 'error');
@@ -1579,8 +1556,9 @@ class BlindfoldChessApp {
         const voiceText = document.getElementById('voiceText');
         const btn = document.getElementById('voiceMoveButton');
         if (btn) {
-            btn.textContent = 'Record';
             btn.classList.remove('is-recording');
+            btn.setAttribute('aria-pressed', 'false');
+            btn.setAttribute('title', 'Record');
         }
         if (voiceText) voiceText.value = 'Processing...';
 
@@ -1589,12 +1567,9 @@ class BlindfoldChessApp {
 
             const form = new FormData();
             form.append('audio', wavBlob, 'speech.wav');
-            // Parse backend+model from selector value (e.g., 'vosk.large' or 'whisper.small')
-            const voiceModelSelect = document.getElementById('voiceModelSelect');
-            const sel = voiceModelSelect ? (voiceModelSelect.value || 'whisper.small') : 'whisper.small';
-            const [backend, model] = sel.includes('.') ? sel.split('.') : ['whisper', 'small'];
-            form.append('backend', backend);
-            form.append('model', model);
+            // Use backend+model configured in code
+            form.append('backend', this.sttBackend);
+            form.append('model', this.sttModel);
             const res = await fetch('/stt', { method: 'POST', body: form });
             if (!res.ok) throw new Error('STT request failed');
             const data = await res.json();
