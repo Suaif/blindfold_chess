@@ -9,6 +9,7 @@ A comprehensive web application designed to help chess players train their blind
 - **AI Chess Engine**: Integrated Stockfish engine with adjustable ELO (1350-3100)
 - **AI Assistant**: Powered by Ollama LLM for natural language interaction
 - **Blindfold Training**: Practice without visual aids using AI assistance
+- Right-click behavior: Cancel an in-progress drag and suppress the browser's context menu anywhere over the board.
 
 ### 🧠 AI Assistant Commands
 - **RECAP**: Lists all moves made in the game with move numbers

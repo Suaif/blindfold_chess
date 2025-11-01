@@ -117,6 +117,18 @@ export function normalizeSpeechToCandidates(text) {
   };
   s = s.split(' ').map(w => numMap[w] || w).join(' ');
 
+  // Special-case: STT often hears 'h4' as 'eight four', '8 4', '84', or '8-4'.
+  // We preserve original text but also create variants mapping leading 8 -> 'h' when followed by a rank.
+  const numericH4Variants = new Set();
+  const addHVariants = (src) => {
+    if (!src) return;
+    let v1 = src.replace(/\b8\s*-?\s*([1-8])\b/g, 'h$1');
+    let v2 = v1.replace(/\b8([1-8])\b/g, 'h$1');
+    if (v1 !== src) numericH4Variants.add(v1);
+    if (v2 !== src) numericH4Variants.add(v2);
+  };
+  addHVariants(s);
+
   s = s.replace(/castle\s+king\s*side|king\s*side\s*castle|short\s*castle|o\s*-\s*o/g, 'O-O');
   s = s.replace(/castle\s+queen\s*side|queen\s*side\s*castle|long\s*castle|o\s*-\s*o\s*-\s*o/g, 'O-O-O');
 
@@ -136,6 +148,12 @@ export function normalizeSpeechToCandidates(text) {
   candidates.add(s.replace(/\s+/g, ''));
   candidates.add(s.replace(/\b([nbrqk])\s*([a-h])\s*([1-8])\b/gi, '$1$2$3').replace(/\s+/g, ''));
   candidates.add(s.replace(/\s+/g, ''));
+
+  // Add h-file variants candidates too
+  for (const v of numericH4Variants) {
+    candidates.add(v.replace(/\s+/g, ''));
+    candidates.add(v.replace(/\b([nbrqk])\s*([a-h])\s*([1-8])\b/gi, '$1$2$3').replace(/\s+/g, ''));
+  }
 
   const sq = Array.from(s.matchAll(/([a-h])\s*([1-8])/g)).map(m => m[1] + m[2]);
   if (sq.length >= 2) {

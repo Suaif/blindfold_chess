@@ -22,16 +22,55 @@ class BlindfoldChessApp {
         this.darkMode = false;
         this.ttsEnabled = true;
         this.awaitingTestAnswer = false; // awaiting spoken answer to TEST
+        // Drag and highlight state
+        this.isDragging = false;
+        this.dragSourceSquare = null;
+        this.dragCancelled = false;
+        this.highlightedSquares = new Set();
+        // Simple move sound
+        this._audioCtx = null;
+        this.playedLocalMoveSound = false;
+        this._boardDomHandlersAttached = false;
+        this._globalContextMenuAttached = false;
+        this._boardObserver = null;
         
         this.initializeApp();
     }
-    
+
+    // ---- Move sound (Web Audio click) ----
+    ensureAudioContext() {
+        if (!this._audioCtx) {
+            try {
+                this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            } catch {}
+        }
+        return this._audioCtx;
+    }
+
+    playMoveSound() {
+        const ctx = this.ensureAudioContext();
+        if (!ctx) return;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sine';
+        o.frequency.value = 660; // pleasant mid tone
+        const now = ctx.currentTime;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.3, now + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.10);
+        o.connect(g).connect(ctx.destination);
+        o.start(now);
+        o.stop(now + 0.12);
+    }
+
     initializeApp() {
         // Ensure global toast container exists before rendering any UI
         this.ensureToastContainer();
         this.loadThemePreference();
         this.applyTheme();
         this.loadTtsPreference();
+        // Install global suppressor early so it applies before board exists
+        this.attachGlobalContextMenuSuppressor();
         this.showSetupScreen();
         this.connectWebSocket();
     }
@@ -97,6 +136,7 @@ class BlindfoldChessApp {
             }
                 
             case 'position_update': {
+                const prevLen = Array.isArray(this.latestMoveHistory) ? this.latestMoveHistory.length : 0;
                 this.currentFen = message.fen;
                 this.latestMoveHistory = Array.isArray(message.move_history) ? message.move_history.slice() : [];
                 this.rebuildTimeline(this.latestMoveHistory, message.fen);
@@ -107,6 +147,19 @@ class BlindfoldChessApp {
                     const plies = message.undo_count;
                     const phrase = plies > 1 ? 'your last move' : 'the last move';
                     this.showStatusMessage(`Undid ${phrase}.`, 'info');
+                } else {
+                    const newLen = Array.isArray(message.move_history) ? message.move_history.length : 0;
+                    const delta = Math.max(0, newLen - prevLen);
+                    if (this.playedLocalMoveSound) {
+                        // We already sounded for the player's move; if engine replied in same update, play once
+                        if (delta >= 2) {
+                            this.playMoveSound();
+                        }
+                        this.playedLocalMoveSound = false;
+                    } else if (delta > 0) {
+                        // Opponent or external move
+                        this.playMoveSound();
+                    }
                 }
                 this.updateGameControls();
                 break;
@@ -597,9 +650,23 @@ class BlindfoldChessApp {
                     (this.playerColor === 'black' && piece.search(/^b/) === -1)) {
                     return false;
                 }
+                // Start drag state and show legal moves immediately (on press)
+                this.isDragging = true;
+                this.dragSourceSquare = source;
+                this.dragCancelled = false;
+                this.showPossibleMovesForSquare(source);
                 return true;
             },
             onDrop: (source, target) => {
+                // Clear highlights when dropping
+                this.clearMoveHighlights();
+                // If user cancelled via right-click, snap back
+                if (this.dragCancelled) {
+                    this.dragCancelled = false;
+                    this.isDragging = false;
+                    this.dragSourceSquare = null;
+                    return 'snapback';
+                }
                 const move = this.game.move({
                     from: source,
                     to: target,
@@ -607,9 +674,15 @@ class BlindfoldChessApp {
                 });
                 
                 if (move === null) {
+                    this.isDragging = false;
+                    this.dragSourceSquare = null;
                     return 'snapback';
                 }
                 
+                // Local move succeeded: play immediate sound
+                this.playMoveSound();
+                this.playedLocalMoveSound = true;
+
                 // Send move to server
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     this.ws.send(JSON.stringify({
@@ -617,9 +690,15 @@ class BlindfoldChessApp {
                         move: move.from + move.to + (move.promotion || '')
                     }));
                 }
+                this.isDragging = false;
+                this.dragSourceSquare = null;
             },
             onSnapEnd: () => {
                 this.board.position(this.game.fen());
+                // Ensure drag state resets in any case
+                this.isDragging = false;
+                this.dragSourceSquare = null;
+                this.dragCancelled = false;
             }
         };
         
@@ -629,7 +708,265 @@ class BlindfoldChessApp {
         this.applyPieceVisibility();
         this.syncPieceToggleButtons();
         this.syncVoiceToggleButton();
+
+        // Attach board DOM listeners for right-click cancel + press highlights
+        this.attachBoardDomHandlers();
+        // Harden piece elements against native image menus/drag and observe future changes
+        this.hardenBoardPiecesAgainstContextMenu();
+        this.observeBoardForPieceElements();
     }
+
+    // ---- Move highlighting helpers ----
+    getBoardElement() {
+        return document.getElementById('chessboard');
+    }
+
+    clearMoveHighlights() {
+        const el = this.getBoardElement();
+        if (!el) return;
+        if (this.highlightedSquares) {
+            for (const sq of this.highlightedSquares) {
+                const nodes = el.querySelectorAll(`.square-${sq}`);
+                nodes.forEach(n => {
+                    n.classList.remove('move-source');
+                    n.classList.remove('move-dest');
+                    n.classList.remove('move-capture');
+                });
+            }
+        }
+        this.highlightedSquares = new Set();
+    }
+
+    showPossibleMovesForSquare(square) {
+        try {
+            this.clearMoveHighlights();
+            if (!this.game) return;
+            const turn = this.game.turn();
+            const piece = this.game.get(square);
+            if (!piece) return;
+            const isOwn = (this.playerColor === 'white' ? 'w' : 'b') === piece.color;
+            if (!isOwn) return;
+            const moves = this.game.moves({ square, verbose: true }) || [];
+            if (!moves.length) return;
+            const el = this.getBoardElement();
+            if (!el) return;
+            // Highlight source
+            const srcNodes = el.querySelectorAll(`.square-${square}`);
+            srcNodes.forEach(n => n.classList.add('move-source'));
+            this.highlightedSquares.add(square);
+            // Highlight destinations
+            for (const mv of moves) {
+                const dest = mv.to;
+                const nodes = el.querySelectorAll(`.square-${dest}`);
+                const isCapture = (mv.flags || '').includes('c');
+                nodes.forEach(n => n.classList.add(isCapture ? 'move-capture' : 'move-dest'));
+                this.highlightedSquares.add(dest);
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    attachBoardDomHandlers() {
+        if (this._boardDomHandlersAttached) return;
+        const el = this.getBoardElement();
+        if (!el) return;
+
+        const isInsideBoard = (target) => {
+            if (!target) return false;
+            const root = this.getBoardElement();
+            let node = target;
+            while (node) {
+                if (node === root) return true;
+                if (node.classList) {
+                    if (node.classList.contains('chessboard-63f37')) return true;
+                    // piece elements (e.g., chessboard.js often uses `piece-417db`)
+                    for (const cls of Array.from(node.classList)) {
+                        if (cls === 'piece' || cls.startsWith('piece-')) return true;
+                    }
+                    // any square
+                    for (const cls of Array.from(node.classList)) {
+                        if (/^square-[a-h][1-8]$/.test(cls)) return true;
+                    }
+                }
+                node = node.parentElement;
+            }
+            return false;
+        };
+        // Suppress context menu anywhere over the board (including pieces), capture phase
+        const ctxHandler = (ev) => {
+            // Suppress context menu while dragging anywhere; otherwise only if over board
+            if (!this.isDragging && !isInsideBoard(ev.target)) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+            if (this.isDragging) {
+                this.dragCancelled = true;
+                this.clearMoveHighlights();
+                if (this.board && this.game) {
+                    this.board.position(this.game.fen());
+                }
+            }
+        };
+        document.addEventListener('contextmenu', ctxHandler, true);
+        document.addEventListener('contextmenu', ctxHandler, false);
+        // Some browsers use auxclick for non-primary buttons
+        const auxHandler = (ev) => {
+            if (!this.isDragging && !isInsideBoard(ev.target)) return;
+            if (ev.button !== 2) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+        };
+        document.addEventListener('auxclick', auxHandler, true);
+        document.addEventListener('auxclick', auxHandler, false);
+
+        // Right button down/up/move during drag -> cancel immediately (capture)
+        const cancelDrag = (ev) => {
+            if (!this.isDragging) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+            this.dragCancelled = true;
+            this.clearMoveHighlights();
+            if (this.board && this.game) {
+                this.board.position(this.game.fen());
+            }
+        };
+
+        const ptrDownHandler = (ev) => { if (ev.button === 2) cancelDrag(ev); };
+        const mouseDownHandler = (ev) => { if (ev.button === 2) cancelDrag(ev); };
+        const ptrUpHandler = (ev) => { if (ev.button === 2) cancelDrag(ev); };
+        const ptrMoveHandler = (ev) => { if ((ev.buttons & 2) === 2) cancelDrag(ev); };
+
+        document.addEventListener('pointerdown', ptrDownHandler, true);
+        document.addEventListener('mousedown', mouseDownHandler, true);
+        document.addEventListener('pointerup', ptrUpHandler, true);
+        document.addEventListener('pointermove', ptrMoveHandler, true);
+        // Show possible moves on initial press (mousedown) without waiting for release
+        el.addEventListener('mousedown', (ev) => {
+            if (ev.button !== 0) return; // only left button
+            // find square class up the tree
+            const target = ev.target;
+            const sq = this.extractSquareFromElement(target);
+            if (!sq) return;
+            // Only show if it's your turn and piece is yours
+            try {
+                if (!this.game) return;
+                if (this.game.turn() !== (this.playerColor === 'white' ? 'w' : 'b')) return;
+                const piece = this.game.get(sq);
+                if (!piece) return;
+                const isOwn = (this.playerColor === 'white' ? 'w' : 'b') === piece.color;
+                if (!isOwn) return;
+                this.showPossibleMovesForSquare(sq);
+            } catch {}
+        });
+        // Clear highlights when mouse is released and no drag occurred
+        window.addEventListener('mouseup', () => {
+            if (!this.isDragging) {
+                this.clearMoveHighlights();
+            }
+        });
+
+        this._boardDomHandlersAttached = true;
+    }
+
+    // Global geometry-based suppression to catch any contextmenu over the board
+    attachGlobalContextMenuSuppressor() {
+        if (this._globalContextMenuAttached) return;
+        const suppressIfOverBoard = (ev) => {
+            try {
+                const boardEl = document.getElementById('chessboard');
+                if (!boardEl) return;
+                const rect = boardEl.getBoundingClientRect();
+                const x = ev.clientX, y = ev.clientY;
+                const inside = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+                if (!inside) return;
+                ev.preventDefault();
+                ev.stopPropagation();
+                if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+                if (this.isDragging) {
+                    this.dragCancelled = true;
+                    this.clearMoveHighlights();
+                    if (this.board && this.game) {
+                        this.board.position(this.game.fen());
+                    }
+                }
+            } catch (_) {}
+        };
+        const auxIfOverBoard = (ev) => {
+            if (ev && ev.button !== 2) return;
+            suppressIfOverBoard(ev);
+        };
+        window.addEventListener('contextmenu', suppressIfOverBoard, true);
+        window.addEventListener('auxclick', auxIfOverBoard, true);
+        this._globalContextMenuAttached = true;
+    }
+
+    // Ensure piece images/divs do not trigger native image menus or drags
+    hardenBoardPiecesAgainstContextMenu() {
+        const root = this.getBoardElement();
+        if (!root) return;
+        const protectEl = (el) => {
+            try {
+                if (!el) return;
+                if (el.dataset && el.dataset.hardenedContext === '1') return;
+                // Disable native context menu directly on the element
+                el.oncontextmenu = () => false;
+                // Prevent native image drag behavior
+                el.setAttribute('draggable', 'false');
+                el.addEventListener('dragstart', (e) => { e.preventDefault(); }, { capture: true });
+                // Extra safety: capture right-clicks on the element
+                el.addEventListener('contextmenu', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+                }, { capture: true });
+                if (el.dataset) el.dataset.hardenedContext = '1';
+            } catch (_) {}
+        };
+        // Images and divs that represent pieces (background-image)
+        const imgs = root.querySelectorAll('img, .piece, [class*="piece-"]');
+        imgs.forEach(protectEl);
+        // Also catch any node with inline background-image style
+        const withBg = root.querySelectorAll('[style*="background-image"]');
+        withBg.forEach(protectEl);
+    }
+
+    // Observe dynamic DOM changes to re-apply hardening as pieces render/animate
+    observeBoardForPieceElements() {
+        if (this._boardObserver) {
+            try { this._boardObserver.disconnect(); } catch {}
+            this._boardObserver = null;
+        }
+        const root = this.getBoardElement();
+        if (!root) return;
+        const observer = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                if (!m.addedNodes || !m.addedNodes.length) continue;
+                m.addedNodes.forEach((n) => {
+                    if (!(n instanceof HTMLElement)) return;
+                    // Direct node
+                    this.hardenBoardPiecesAgainstContextMenu();
+                });
+            }
+        });
+        observer.observe(root, { childList: true, subtree: true });
+        this._boardObserver = observer;
+    }
+
+    extractSquareFromElement(el) {
+        let node = el;
+        for (let i = 0; i < 3 && node; i++, node = node.parentElement) {
+            if (!node.classList) continue;
+            for (const cls of Array.from(node.classList)) {
+                if (/^square-[a-h][1-8]$/.test(cls)) {
+                    return cls.slice('square-'.length);
+                }
+            }
+        }
+        return null;
+    }
+
 
     // Toggle piece visibility and sync controls
     togglePieces(visible) {
@@ -904,6 +1241,10 @@ class BlindfoldChessApp {
         // Clear input
         const manualInput = document.getElementById('manualMoveInput');
         if (manualInput) manualInput.value = '';
+
+        // Local move succeeded: play immediate sound and mark to suppress duplicate
+        this.playMoveSound();
+        this.playedLocalMoveSound = true;
     }
 
     // Convert a typed move to UCI (e2e4, or from SAN like Nf3 / O-O / e8=Q)

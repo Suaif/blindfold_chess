@@ -4,7 +4,5 @@ TODO.txt
 __pycache__
 assets/
 moves/
-context.md
-STT_ARCHITECTURE.md
-STT_REFACTORING_SUMMARY.md
+*.md
 output_bryce.wav

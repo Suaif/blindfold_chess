@@ -287,6 +287,18 @@ def _merge_square_tokens(tokens: Sequence[str]) -> List[str]:
             i += 1
             continue
 
+        # STT often hears 'h4' as '8 4' or '84' or '8-4' (hyphens already normalized away).
+        # Convert a leading '8' followed by a rank into 'h<rank>'.
+        if token == '8':
+            if i + 1 < len(tokens) and tokens[i + 1] in "12345678":
+                merged.append('h' + tokens[i + 1])
+                i += 2
+                continue
+        if re.fullmatch(r"8[1-8]", token):
+            merged.append('h' + token[1])
+            i += 1
+            continue
+
         if token in LETTER_WORDS.values() and i + 1 < len(tokens) and tokens[i + 1] in "12345678":
             merged.append(token + tokens[i + 1])
             i += 2
