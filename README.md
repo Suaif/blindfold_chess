@@ -1,6 +1,6 @@
 # Blindfold Chess Training Application
 
-A web application designed to help chess players train their blindfold chess skills by playing by dictating the moves and with a chat assistant that can ask you questions about the positions.
+A web application designed to help chess players train their blindfold chess skills by playing by dictating the moves, and with a chat assistant that can ask you questions about the positions.
 
 ![Screenshot of the portal](/static/screenshot.png)
 
@@ -10,7 +10,7 @@ A web application designed to help chess players train their blindfold chess ski
 - **AI Chess Engine**: Integrated Stockfish engine with adjustable ELO (1320-3100)
 - **Chat Assistant**: Powered by Ollama LLM for natural language interaction
 - **Blindfold Training**: Practice without visual aids using AI assistance
-- **Local integration**: It is designed to run compleetly on local.
+- **Local integration**: It is designed to run completely locally.
 
 ### 🧠 Chat Assistant Commands
 - **RECAP**: Lists all moves made in the game with move numbers
@@ -27,7 +27,7 @@ A web application designed to help chess players train their blindfold chess ski
 ### Step 1: Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Suaif/blindfold_chess/
 cd blindfold-chess-training
 ```
 
@@ -51,7 +51,7 @@ pip install -r requirements.txt
    ollama pull llama3.2:3b
    ```
 
-3. **Run Ollama:** Ollama will be needed to be ran on a terminal during the execution.
+3. **Run Ollama:** Ollama will need to be run on a terminal during the execution.
    ```bash
    ollama serve
    ```
@@ -59,14 +59,14 @@ pip install -r requirements.txt
 ### Step 4: Set up STT
 
 Using faster-whisper for faster inference.
-The models can be obtained via Hugging Face (guillaumekln/faster-whisper-*) and place them in the paths below.
+The models can be obtained from Hugging Face (guillaumekln/faster-whisper-*) and placed in the paths below.
 
 ```
 assets/speech_to_text/models--guillaumekln--faster-whisper-small.en/...
 assets/speech_to_text/models--guillaumekln--faster-whisper-medium.en/...
 ```
 
-### Step 4: Run the Application 
+### Step 5: Run the Application 
 
 ```bash
 python main.py
@@ -76,8 +76,8 @@ The application UI will now be available at **http://localhost:8000**
 
 ## Using in the UI
 
-Press the record button, dictate the move or command, press again the record button.
-When asking for a test question, you can add captures/check/what/where and black/white to specify the kind of question you want.
+Press the record button, dictate the move or command, then press the record button again.
+When asking for a test question, you can add `captures`/`check`/`what`/`where` and `black`/`white` to specify the kind of question you want.
 
 ## Code Organization
 
