@@ -226,6 +226,13 @@ body {
     width: 100%;
     max-width: 500px;
     margin: 0 auto;
+    /* Prevent page scroll while touching/dragging on the board */
+    touch-action: none;
+    -ms-touch-action: none; /* older Edge */
+    overscroll-behavior: contain; /* keep pull-to-refresh/page scroll from hijacking */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 /* Manual move UI removed */
@@ -292,17 +299,101 @@ body {
 .btn-icon { line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .btn-icon svg { display: block; }
 
-.voice-text-row {
+.board-row {
     width: 100%;
     max-width: 500px;
-    margin: 6px auto 0;
+    margin: 8px auto 0;
     display: flex;
-    justify-content: center;
+    align-items: center;
+    gap: 16px;
 }
-.voice-text-row .voice-text {
-    width: 70%;
-    max-width: 360px;
-    flex: 0 0 auto;
+
+/* Row 1: conversation + record buttons on left group, input to the right */
+.row-voice {
+    justify-content: flex-start;
+    padding-left: 16px; /* nudge a bit to the right */
+}
+.row-voice .voice-buttons {
+    display: flex;
+    align-items: center;
+    gap: 18px; /* more space between convo and record */
+    margin-right: 12px;
+}
+.row-voice .voice-text-row {
+    flex: 1 1 auto;
+    display: flex;
+    justify-content: flex-start;
+}
+.row-voice .voice-text-row .voice-text {
+    width: 50%;
+    max-width: 260px; /* shorter to give more room to buttons */
+    min-width: 160px;
+}
+
+/* Row 2: center the arrows, keep undo aligned to the right */
+.row-controls {
+    justify-content: space-between;
+    padding-left: 8px; /* slight alignment with row-voice */
+}
+.row-controls .timeline-nav {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    margin: 0; /* override previous margin */
+}
+.row-controls #undoButton {
+    margin-left: auto; /* push to the right */
+}
+
+/* Timeline navigation under recognition output */
+.timeline-nav {
+    width: 100%;
+    max-width: 500px;
+    margin: 8px auto 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+}
+
+.keycap-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: #ffffff;
+    color: #111111;
+    border: 3px solid #111111;
+    display: grid;
+    place-items: center;          /* rock-solid centering */
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
+    /* layered shadow to evoke stacked keycap */
+    filter: drop-shadow(0 3px 0 #111111) drop-shadow(3px 6px 0 #111111);
+    box-shadow: inset 0 0 0 0 rgba(0,0,0,0);
+}
+
+.keycap-btn:hover { transform: translateY(-1px); }
+.keycap-btn:active { transform: translateY(0); }
+.keycap-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.keycap-arrow {
+    display: inline-block;
+    line-height: 1;
+    font-weight: 900;             /* heavier glyph */
+    font-size: 30px;              /* a touch larger for clarity */
+    letter-spacing: 0;            /* keep arrow compact */
+    -webkit-text-stroke: 1.2px currentColor; /* thicker outline in WebKit */
+    /* Faux outline for Firefox/others to visually thicken the arrow */
+    text-shadow:
+      0 0 0 currentColor,
+      -0.6px -0.6px 0 currentColor,
+       0.6px -0.6px 0 currentColor,
+      -0.6px  0.6px 0 currentColor,
+       0.6px  0.6px 0 currentColor;
 }
 
 .voice-status {

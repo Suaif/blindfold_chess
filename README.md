@@ -1,25 +1,27 @@
 # Blindfold Chess Training Application
 
-A comprehensive web application designed to help chess players train their blindfold chess skills with an AI assistant that can recap moves and test position knowledge through interactive questions.
+A web application designed to help chess players train their blindfold chess skills by playing by dictating the moves and with a chat assistant that can ask you questions about the positions.
+
+![Screenshot of the portal](/static/screenshot.png)
 
 ## Features
 
 ### 🎯 Core Functionality
-- **Interactive Chessboard**: Full-featured chessboard with drag-and-drop piece movement
-- **AI Chess Engine**: Integrated Stockfish engine with adjustable ELO (1350-3100)
-- **AI Assistant**: Powered by Ollama LLM for natural language interaction
+- **AI Chess Engine**: Integrated Stockfish engine with adjustable ELO (1320-3100)
+- **Chat Assistant**: Powered by Ollama LLM for natural language interaction
 - **Blindfold Training**: Practice without visual aids using AI assistance
-- Right-click behavior: Cancel an in-progress drag and suppress the browser's context menu anywhere over the board.
+- **Local integration**: It is designed to run compleetly on local.
 
-### 🧠 AI Assistant Commands
+### 🧠 Chat Assistant Commands
 - **RECAP**: Lists all moves made in the game with move numbers
 - **TEST**: Asks random questions about the current position:
   - Number of checks in the position
   - Number of captures in the position
   - Location of specific pieces (queens, etc.)
   - What piece is on a specific square
-- **Custom Questions to the model**: Ask about piece locations, square contents, and position details
-
+  **REPEAT**: Repeat the last voice output
+  **UNDO**: Undo the last made move
+- **Custom Questions to the model**: Ask about piece locations and square contents
 ## Installation & Setup
 
 ### Step 1: Clone the Repository
@@ -49,79 +51,45 @@ pip install -r requirements.txt
    ollama pull llama3.2:3b
    ```
 
-3. **Test Ollama installation:**
+3. **Run Ollama:** Ollama will be needed to be ran on a terminal during the execution.
    ```bash
-   ollama run llama3.2:3b "Hello, can you help me with chess training?"
+   ollama serve
    ```
 
-### Step 4: Run the Application 🚀
+### Step 4: Set up STT
 
-```bash
-python main.py
-```
-The application UI will now be available at **http://localhost:8000**
-
-## Voice Input (Speak Your Move)
-
-You can enter moves by voice using these backends:
-
-1) Browser (Web Speech API)
-- Works in Chrome/Edge with built-in speech recognition.
-- No server setup required.
-
-2) Local Vosk (Offline)
-- Runs entirely on your CPU. Smaller model is faster; large model is more accurate.
-
-3) Local Whisper via Faster-Whisper (GPU if available)
-- High-quality transcription, uses your NVIDIA GPU if present (RTX 4060 recommended).
-- Falls back to CPU with int8 compute for portability.
-
-### Setup steps
-
-- Install Python packages:
-
-```bash
-pip install -r requirements.txt
-```
-
-- Vosk models:
-   - Large (en-us-0.22) and Small (en-us-0.15) model directories are expected under `assets/speech_to_text/`.
-   - If missing, download from https://alphacephei.com/vosk/models and place the folders under:
-
-```
-assets/speech_to_text/vosk-model-en-us-0.22
-assets/speech_to_text/vosk-model-small-en-us-0.15
-```
-
-- Whisper models (Faster-Whisper):
-   - Small and Medium English models are referenced under:
+Using faster-whisper for faster inference.
+The models can be obtained via Hugging Face (guillaumekln/faster-whisper-*) and place them in the paths below.
 
 ```
 assets/speech_to_text/models--guillaumekln--faster-whisper-small.en/...
 assets/speech_to_text/models--guillaumekln--faster-whisper-medium.en/...
 ```
 
-   - If missing, you can obtain them via Hugging Face (guillaumekln/faster-whisper-*) and place them under the paths above.
+### Step 4: Run the Application 
 
-### Using in the UI
+```bash
+python main.py
+```
+The application UI will now be available at **http://localhost:8000**
 
-- In the voice controls next to the Record button, pick one of:
-   - Vosk Large (en-us-0.22)
-   - Vosk Small (small-en-us-0.15)
-   - Whisper Small (CUDA if available)
-   - Whisper Medium (CUDA if available)
 
-When you click Record, the browser captures a short utterance, encodes a mono 16 kHz WAV, and sends it to the `/stt` endpoint. The server performs transcription with the selected backend and returns text. Spoken phrases like "e two e four", "castle king side", "knight f three", or "e seven e eight queen" are normalized to legal chess moves.
+## Using in the UI
 
-Troubleshooting
-- If you select Whisper and see an error, ensure `faster-whisper` is installed (it is listed in `requirements.txt`).
-- GPU usage: the app auto-detects CUDA via `ctranslate2`. If unavailable, it will run on CPU.
+Press the record button, dictate the move or command, press again the record button.
+When asking for a test question, you can add captures/check/what/where and black/white to specify the kind of question you want.
 
 ## Code Organization
 
-- `main.py`: FastAPI app, websocket/game flow, and thin HTTP endpoints (including `/stt`).
-- `stt.py`: Speech-to-Text utilities. Contains Vosk model discovery/loading and WAV transcription. Designed to support future Whisper integration without changing `main.py`.
-- `chat_assistant.py`: Ollama-powered chat logic for recap and training questions.
+- `main.py` — FastAPI server, WebSocket game loop, Stockfish control. HTTP endpoints: `/stt`, `/tts/speak`, `/log_voice`. Includes utilities to convert SAN to spoken text and to build TTS payloads.
+- `chess_normalizer.py` — Deterministic speech normalization that turns noisy transcripts into SAN/UCI candidates with rule trace.
+- `stt.py` — Speech-to-Text backends (Whisper via faster-whisper, Vosk) and a factory that caches transcribers.
+- `tts.py` — Local Piper TTS wrapper used to synthesize audio for spoken feedback.
+- `static/js/main.js` — Frontend controller: UI rendering, WebSocket client, board state, voice UX orchestration (recording, candidate handling, suggestion prompts, TTS queue), and the Repeat command.
+- `static/js/voice_moves.js` — Pure helpers for voice→move: parsing to UCI, humanizing moves, best-match suggestion, and yes/no decision logic.
+- `static/js/audio.js` — Microphone capture (WAV encoder) and a lightweight JS fallback normalizer for speech candidates.
+- `static/css/style.css` — App styling, including the two-row layout under the board (buttons + recognition input, then timeline navigation + undo).
+- `index.html` — App shell that loads the frontend bundle.
 
 ## License
 
@@ -129,4 +97,4 @@ This project is open source. Feel free to modify and distribute according to you
 
 ---
 
-**Enjoy your blindfold chess training!** 🏆
+**Enjoy your blindfold chess training!**

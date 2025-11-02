@@ -6,3 +6,5 @@ assets/
 moves/
 *.md
 output_bryce.wav
+*.bat
+*.ps1

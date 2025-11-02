@@ -61,7 +61,7 @@ class GameState:
         self.move_history = []
         self.engine = None
         self.player_color = chess.WHITE
-        self.engine_elo = 1350
+        self.engine_elo = 1320
         self.game_active = False
         self.test_score = 0
         self.test_questions = 0
@@ -444,7 +444,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if message_type == "new_game":
                 game_state.__init__()  # Reset game state
                 game_state.player_color = chess.WHITE if data.get("color") == "white" else chess.BLACK
-                game_state.engine_elo = data.get("elo", 1350)
+                game_state.engine_elo = data.get("elo", 1320)
                 await game_state.initialize_engine()
                 game_state.game_active = True
                 
@@ -605,11 +605,8 @@ async def stt_endpoint(audio: UploadFile = File(...), backend: str = Form("vosk"
     """
     data = await audio.read()
     if not data:
-        empty_payload = await create_tts_payload("I did not catch any audio.")
-        response: Dict[str, object] = {"text": ""}
-        if empty_payload:
-            response["tts"] = empty_payload
-        return response
+        # No audio received; return empty text and no TTS.
+        return {"text": ""}
 
     try:
         # Get cached transcriber instance for better performance
@@ -622,24 +619,11 @@ async def stt_endpoint(audio: UploadFile = File(...), backend: str = Form("vosk"
         if normalization.applied_rules:
             print(f"    normalization rules: {normalization.applied_rules}")
 
-        spoken_candidate = ""
-        if normalization.candidates:
-            spoken_candidate = candidate_to_spoken_text(normalization.candidates[0])
-        fallback_text = text.strip()
-        feedback_phrase = spoken_candidate or fallback_text
-        feedback_text = (
-            f"Heard {feedback_phrase}."
-            if feedback_phrase
-            else "Sorry, I could not understand that move."
-        )
-        tts_payload = await create_tts_payload(feedback_text)
         response: Dict[str, object] = {
             "text": text,
             "normalized": normalization.to_dict(),
             "candidates": normalization.candidates,
         }
-        if tts_payload:
-            response["tts"] = tts_payload
         return response
     except STTError as e:
         # Unsupported backend or unavailable model; treat as client or service error respectively.

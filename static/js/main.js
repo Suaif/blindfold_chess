@@ -1,5 +1,6 @@
 import { loadChessLibraries } from './chesslib.js';
 import { LocalRecorder, normalizeSpeechToCandidates } from './audio.js';
+import { humanizeMoveFromFen, parseMoveToUCI as parseMoveToUCIFen, findBestMatchingMoveSuggestion as suggestMoveFromFen, resolveImplicitDestination as resolveImplicitFromFen, decideYesNo } from './voice_moves.js';
 
 class BlindfoldChessApp {
     constructor() {
@@ -9,12 +10,13 @@ class BlindfoldChessApp {
         this.connected = false;
         this.gameActive = false;
         this.playerColor = 'white';
-        this.engineElo = 1350;
+        this.engineElo = 1320;
         this.testAnswer = null;
         this.piecesVisible = true; // track piece visibility
         this.isListening = false;
         this.ttsAudio = null;
         this.ttsQueue = [];
+        this.lastTtsPayload = null; // remember last spoken TTS payload for Repeat
         this.recorder = null;
         this.latestMoveHistory = [];
         this.resetTimelineState();
@@ -22,6 +24,8 @@ class BlindfoldChessApp {
         this.darkMode = false;
         this.ttsEnabled = true;
         this.awaitingTestAnswer = false; // awaiting spoken answer to TEST
+        // Pending yes/no confirmation for suggested voice move
+        this.pendingMoveConfirm = null; // { uci, san, spoken, score }
         // Drag and highlight state
         this.isDragging = false;
         this.dragSourceSquare = null;
@@ -35,7 +39,7 @@ class BlindfoldChessApp {
         this._boardObserver = null;
         // STT configuration (model selection moved from UI to code)
         this.sttBackend = 'whisper'; // 'whisper' or 'vosk'
-        this.sttModel = 'small';     // e.g., 'small', 'medium', 'large' or 'auto'
+        this.sttModel = 'medium';     // e.g., 'small', 'medium', 'large' or 'auto'
         
         this.initializeApp();
     }
@@ -230,6 +234,8 @@ class BlindfoldChessApp {
         if (!payload) return;
 
         if (payload.audio) {
+            // store last payload with audio for repeat functionality
+            this.lastTtsPayload = payload;
             const audio = new Audio(`data:audio/wav;base64,${payload.audio}`);
             audio.addEventListener('ended', () => {
                 if (this.ttsAudio === audio) {
@@ -261,6 +267,27 @@ class BlindfoldChessApp {
         }
     }
 
+    repeatLastTts() {
+        if (!this.ttsEnabled) {
+            this.showStatusMessage('Voice feedback is disabled.', 'info');
+            return;
+        }
+        const payload = this.lastTtsPayload;
+        if (!payload) {
+            this.showStatusMessage('Nothing to repeat yet.', 'info');
+            return;
+        }
+        if (payload.audio) {
+            // Re-enqueue the last audio payload
+            this.playTts(payload);
+        } else if (payload.text) {
+            // Generate audio again for text-only payload
+            this.requestTts(payload.text);
+        } else {
+            this.showStatusMessage('Nothing to repeat yet.', 'info');
+        }
+    }
+
     async requestTts(text) {
         if (!text || !this.ttsEnabled) return;
         try {
@@ -283,69 +310,8 @@ class BlindfoldChessApp {
     }
 
     humanizeMove(moveText) {
-        if (!moveText) return '';
-
-        const normalizeSan = (san) => {
-            if (!san) return '';
-            let s = san.trim();
-            s = s.replace(/[+#?!]+$/g, '');
-
-            if (/^O-O-O/i.test(s)) return 'castle queen side';
-            if (/^O-O/i.test(s)) return 'castle king side';
-
-            const matchSquares = Array.from(s.matchAll(/([a-h][1-8])/gi));
-            const dest = matchSquares.length ? matchSquares[matchSquares.length - 1][1].toLowerCase() : s.toLowerCase();
-
-            const promoMatch = s.match(/=([QRBN])/i);
-            if (promoMatch) {
-                const promoNames = { Q: 'queen', R: 'rook', B: 'bishop', N: 'knight' };
-                const piece = promoNames[promoMatch[1].toUpperCase()] || promoMatch[1].toLowerCase();
-                return `${dest} promotes to ${piece}`;
-            }
-
-            const isCapture = s.includes('x');
-            const pieceNames = { K: 'king', Q: 'queen', R: 'rook', B: 'bishop', N: 'knight' };
-            const prefix = s[0] ? s[0].toUpperCase() : '';
-
-            if (pieceNames[prefix]) {
-                const name = pieceNames[prefix];
-                return isCapture ? `${name} takes ${dest}` : `${name} ${dest}`;
-            }
-
-            // Pawn moves: on capture use file letter (e.g., 'exd5' -> 'e takes d5')
-            if (isCapture) {
-                const m = s.match(/^([a-h])x/i);
-                if (m) {
-                    return `${m[1].toLowerCase()} takes ${dest}`;
-                }
-                return `pawn takes ${dest}`;
-            }
-            return dest;
-        };
-
-        const currentFen = this.game ? this.game.fen() : undefined;
-        if (!currentFen) return normalizeSan(moveText);
-
-        const temp = new Chess(currentFen);
-
-        // Try UCI first
-        const uciMatch = moveText.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
-        if (uciMatch) {
-            const [, from, to, promo] = uciMatch;
-            const mv = temp.move({ from: from.toLowerCase(), to: to.toLowerCase(), promotion: promo ? promo.toLowerCase() : undefined });
-            if (mv && mv.san) return normalizeSan(mv.san);
-        }
-
-        // Try SAN/lan via sloppy parsing
-        try {
-            const clone = new Chess(currentFen);
-            const mv = clone.move(moveText, { sloppy: true });
-            if (mv && mv.san) return normalizeSan(mv.san);
-        } catch (_) {
-            // fall back to raw normalization
-        }
-
-        return normalizeSan(moveText);
+        const fen = this.game ? this.game.fen() : null;
+        try { return humanizeMoveFromFen(fen, moveText, Chess); } catch { return String(moveText || ''); }
     }
     
     showSetupScreen() {
@@ -386,7 +352,7 @@ class BlindfoldChessApp {
                     
                     <div class="setup-group">
                         <label>Opponent Strength (ELO):</label>
-                        <input type="range" class="elo-slider" min="800" max="2800" value="1350" id="eloSlider">
+                        <input type="range" class="elo-slider" min="1320" max="2800" value="1350" id="eloSlider">
                         <div class="elo-display" id="eloDisplay">1350 ELO</div>
                     </div>
                     
@@ -480,26 +446,40 @@ class BlindfoldChessApp {
                             </div>
                         </div>
                         <div id="chessboard"></div>
-                        <div class="board-actions">
-                            <button id="convoModeButton" class="circle-btn convo-btn" title="Conversational mode (coming soon)" aria-label="Conversational mode (coming soon)">
-                                <span class="btn-icon" aria-hidden="true">
-                                    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true">
-                                        <path d="M20 2H4a2 2 0 0 0-2 2v14l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
-                                    </svg>
-                                </span>
-                                <span class="sr-only">Conversational mode (coming soon)</span>
-                            </button>
-                            <button id="voiceMoveButton" class="circle-btn voice-move-button record-btn" title="Record" aria-label="Record" aria-pressed="false">
-                                <span class="btn-icon" aria-hidden="true">🎙️</span>
-                                <span class="sr-only">Record</span>
-                            </button>
+                        <!-- Row 1: conversation + record + recognition output -->
+                        <div class="board-row row-voice">
+                            <div class="voice-buttons">
+                                <button id="convoModeButton" class="circle-btn convo-btn" title="Conversational mode (coming soon)" aria-label="Conversational mode (coming soon)">
+                                    <span class="btn-icon" aria-hidden="true">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true">
+                                            <path d="M20 2H4a2 2 0 0 0-2 2v14l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
+                                        </svg>
+                                    </span>
+                                    <span class="sr-only">Conversational mode (coming soon)</span>
+                                </button>
+                                <button id="voiceMoveButton" class="circle-btn voice-move-button record-btn" title="Record" aria-label="Record" aria-pressed="false">
+                                    <span class="btn-icon" aria-hidden="true">🎙️</span>
+                                    <span class="sr-only">Record</span>
+                                </button>
+                            </div>
+                            <div class="voice-text-row">
+                                <input type="text" id="voiceText" class="voice-text" placeholder="Recognition output..." readonly>
+                            </div>
+                        </div>
+                        <!-- Row 2: nav prev/next + undo -->
+                        <div class="board-row row-controls">
+                            <div class="timeline-nav">
+                                <button id="navPrev" class="keycap-btn" title="Previous position" aria-label="Previous position">
+                                    <span class="keycap-arrow" aria-hidden="true">←</span>
+                                </button>
+                                <button id="navNext" class="keycap-btn" title="Next position" aria-label="Next position">
+                                    <span class="keycap-arrow" aria-hidden="true">→</span>
+                                </button>
+                            </div>
                             <button id="undoButton" class="circle-btn undo-btn" title="Undo your last move" aria-label="Undo last move">
                                 <span class="btn-icon" aria-hidden="true">↶</span>
                                 <span class="sr-only">Undo move</span>
                             </button>
-                        </div>
-                        <div class="voice-text-row">
-                            <input type="text" id="voiceText" class="voice-text" placeholder="Recognition output..." readonly>
                         </div>
                     </div>
                     
@@ -511,7 +491,7 @@ class BlindfoldChessApp {
                     </div>
                     
                     <div class="panel chat-panel">
-                        <h3>AI Assistant</h3>
+                        <h3>Chat Assistant</h3>
                         <div class="chat-messages" id="chatMessages"></div>
                         <div class="chat-input-container">
                             <input type="text" class="chat-input" id="chatInput" placeholder="Type RECAP, TEST, or ask about the position...">
@@ -533,6 +513,15 @@ class BlindfoldChessApp {
             undoButton.addEventListener('click', () => {
                 this.requestUndo();
             });
+        }
+
+        const prevBtn = document.getElementById('navPrev');
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => this.stepTimeline(-1));
+        }
+        const nextBtn = document.getElementById('navNext');
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => this.stepTimeline(1));
         }
 
         const resetButton = document.getElementById('resetButton');
@@ -770,6 +759,16 @@ class BlindfoldChessApp {
         if (this._boardDomHandlersAttached) return;
         const el = this.getBoardElement();
         if (!el) return;
+
+        // On touch devices, prevent the page from scrolling when interacting with the board
+        try {
+            el.style.touchAction = 'none';
+            const preventTouchScroll = (ev) => {
+                if (ev && ev.cancelable) ev.preventDefault();
+            };
+            el.addEventListener('touchstart', preventTouchScroll, { passive: false, capture: true });
+            el.addEventListener('touchmove', preventTouchScroll, { passive: false, capture: true });
+        } catch (_) {}
 
         const isInsideBoard = (target) => {
             if (!target) return false;
@@ -1244,33 +1243,7 @@ class BlindfoldChessApp {
 
     // Convert a typed move to UCI (e2e4, or from SAN like Nf3 / O-O / e8=Q)
     parseMoveToUCI(moveText) {
-        const text = moveText.trim();
-        if (!text) return null;
-
-        // Coordinate format like e2e4 or e7e8q
-        const coord = text.toLowerCase().replace(/\s+/g, '');
-        const m = coord.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/);
-        if (m) {
-            const from = m[1];
-            const to = m[2];
-            const promo = m[3] || '';
-            // Optionally, validate with a temp game
-            const tmp = new Chess(this.game.fen());
-            const ok = tmp.move({ from, to, promotion: promo || undefined });
-            if (!ok) return null;
-            return from + to + promo;
-        }
-
-        // Else try SAN via chess.js with sloppy parsing
-        try {
-            const tmp = new Chess(this.game.fen());
-            const mv = tmp.move(text, { sloppy: true });
-            if (!mv) return null;
-            const promo = mv.promotion ? mv.promotion : '';
-            return mv.from + mv.to + promo;
-        } catch (e) {
-            return null;
-        }
+        try { return parseMoveToUCIFen(this.game ? this.game.fen() : null, moveText, Chess); } catch { return null; }
     }
     
     updateMoveList(moveHistory) {
@@ -1502,6 +1475,8 @@ class BlindfoldChessApp {
     updateGameControls() {
         const voiceBtn = document.getElementById('voiceMoveButton');
         const undoButton = document.getElementById('undoButton');
+        const prevBtn = document.getElementById('navPrev');
+        const nextBtn = document.getElementById('navNext');
 
         const connected = !!(this.ws && this.ws.readyState === WebSocket.OPEN);
         const isActive = !!this.gameActive;
@@ -1514,6 +1489,12 @@ class BlindfoldChessApp {
 
         if (voiceBtn) voiceBtn.disabled = !canMove;
         if (undoButton) undoButton.disabled = !(connected && isActive && hasUndo);
+
+        const hasTimeline = Array.isArray(this.positionTimeline) && this.positionTimeline.length > 0;
+        const hasPrev = hasTimeline && this.timelineIndex > 0;
+        const hasNext = hasTimeline && this.timelineIndex < this.positionTimeline.length - 1;
+        if (prevBtn) prevBtn.disabled = !hasPrev;
+        if (nextBtn) nextBtn.disabled = !hasNext;
     }
 
     // ---- Local recording for server-side STT (e.g., Vosk/Whisper) ----
@@ -1576,8 +1557,20 @@ class BlindfoldChessApp {
             const sttText = (data && typeof data.text === 'string') ? data.text : '';
             if (voiceText) voiceText.value = sttText;
 
+            // If we are awaiting a yes/no for a suggested move, handle that first
+            if (this.pendingMoveConfirm) {
+                const handled = this.handlePendingMoveConfirmation(sttText);
+                // Skip further processing (no chat/move parsing while confirming)
+                return;
+            }
+
             // Route "recap"/"test" or pending test answers to chat assistant
             const chatMessage = this.parseChatVoiceCommand(sttText);
+            // Local client command: Repeat last TTS
+            if (chatMessage === 'repeat') {
+                this.repeatLastTts();
+                return;
+            }
             if (this.awaitingTestAnswer || chatMessage) {
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     const msg = this.awaitingTestAnswer ? sttText : chatMessage;
@@ -1587,7 +1580,7 @@ class BlindfoldChessApp {
                 return;
             }
 
-            if (data.tts) this.playTts(data.tts);
+            // Do not play server-provided TTS here; client will handle voice UX
             this.handleSpokenMove(data);
         } catch (e) {
             if (voiceText) voiceText.value = 'STT error';
@@ -1605,6 +1598,9 @@ class BlindfoldChessApp {
 
         // Direct recap
         if (s === 'recap' || s.includes('recap')) return 'recap';
+
+        // Repeat last spoken TTS
+        if (s === 'repeat' || s.includes('repeat')) return 'repeat';
 
         // Test variants
         if (s === 'test' || s.startsWith('test ')) {
@@ -1686,7 +1682,8 @@ class BlindfoldChessApp {
             if (ok) {
                 console.log(`[STT] Matched candidate "${cand}" -> UCI ${ok}`);
                 const spoken = this.humanizeMove(ok);
-                // this.requestTts(`Move recognized: ${spoken}.`);
+                // For directly recognized move, announce Playing [move]
+                if (spoken) this.requestTts(`Playing ${spoken}.`);
                 fetch('/log_voice', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1706,7 +1703,20 @@ class BlindfoldChessApp {
         }
 
         console.log('[STT] No valid candidate matched board state');
-        // this.requestTts('Sorry, that move was not recognized.');
+
+        // Fallback: suggest the closest legal move by similarity to transcript
+        const suggestion = (function(fen, t){ try { return suggestMoveFromFen(fen, t, Chess); } catch { return null; } })(this.game ? this.game.fen() : null, text);
+        if (suggestion && suggestion.score >= 0.45) {
+            this.pendingMoveConfirm = suggestion; // {uci, san, spoken, score}
+            const spoken = suggestion.spoken || this.humanizeMove(suggestion.san) || this.humanizeMove(suggestion.uci);
+            const prompt = `Did you mean ${spoken}? Please say yes or no.`;
+            this.requestTts(prompt);
+            this.showStatusMessage(`Suggestion: ${spoken}. Say yes or no.`, 'info');
+            return;
+        }
+
+        // No suggestion available: apologize and echo what was understood
+        if (text) this.requestTts(`Sorry, I understood ${text}.`);
 
         fetch('/log_voice', {
             method: 'POST',
@@ -1720,6 +1730,42 @@ class BlindfoldChessApp {
         }).catch(() => {});
 
         this.showStatusMessage('Could not parse spoken move. Try again or type it.', 'error');
+    }
+
+    // Try to resolve implicit pawn capture like 'xe5' to a unique legal move (delegated)
+    resolveImplicitDestination(moveText) {
+        try { return resolveImplicitFromFen(this.game ? this.game.fen() : null, moveText, Chess); } catch { return null; }
+    }
+
+    // Similarity helpers moved to voice_moves.js
+
+    // Find best matching legal move given a transcript (delegated)
+    findBestMatchingMoveSuggestion(transcript) {
+        try { return suggestMoveFromFen(this.game ? this.game.fen() : null, transcript, Chess); } catch { return null; }
+    }
+
+    // Handle yes/no response for a pending move suggestion
+    handlePendingMoveConfirmation(sttText) {
+        if (!this.pendingMoveConfirm) return false;
+        const decision = decideYesNo(sttText); // 'yes' | 'no' | null
+        const suggestion = this.pendingMoveConfirm;
+        // Clear suggestion now regardless
+        this.pendingMoveConfirm = null;
+        if (decision === 'yes') {
+            const spoken = suggestion.spoken || this.humanizeMove(suggestion.san) || this.humanizeMove(suggestion.uci);
+            this.requestTts(`Playing ${spoken}.`);
+            this.submitManualMove(suggestion.uci, 'voice');
+            return true;
+        }
+        if (decision === 'no') {
+            this.requestTts('Okay. Please say the move again.');
+            return true;
+        }
+        // ask again
+        const spoken = suggestion.spoken || this.humanizeMove(suggestion.san) || this.humanizeMove(suggestion.uci);
+        this.pendingMoveConfirm = suggestion;
+        this.requestTts(`Please answer yes or no. Did you mean ${spoken}?`);
+        return true;
     }
 }
 

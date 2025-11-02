@@ -138,6 +138,10 @@ export function normalizeSpeechToCandidates(text) {
        .replace(/queen/g, 'Q')
        .replace(/king/g, 'K');
 
+  // Allow phrases like 'pawn to a4' / 'pawn takes e5'
+  s = s.replace(/\bpawn\b/g, '');
+  s = s.replace(/\bprawn\b/g, '');
+
   s = s.replace(/takes|x|by/g, 'x');
   s = s.replace(/equals\s*queen|promote\s*to\s*queen|=\s*q/g, '=Q');
   s = s.replace(/equals\s*rook|promote\s*to\s*rook|=\s*r/g, '=R');
@@ -158,6 +162,10 @@ export function normalizeSpeechToCandidates(text) {
   const sq = Array.from(s.matchAll(/([a-h])\s*([1-8])/g)).map(m => m[1] + m[2]);
   if (sq.length >= 2) {
     candidates.add((sq[0] + sq[1]).toLowerCase());
+  }
+  if (sq.length === 1) {
+    // Single destination square (e.g., 'pawn to a4')
+    candidates.add(sq[0].toLowerCase());
   }
 
   const promoMap = { 'queen': 'q', 'rook': 'r', 'bishop': 'b', 'knight': 'n', 'q': 'q', 'r': 'r', 'b': 'b', 'n': 'n' };
