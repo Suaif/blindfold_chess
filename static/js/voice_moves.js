@@ -221,3 +221,56 @@ export function decideYesNo(transcript) {
   return decision; // 'yes' | 'no' | null
 }
 
+// Parse yes/no intent and return any remainder text after a 'no' for follow-up parsing
+// Example: "no, I meant knight f3" -> { decision: 'no', remainder: 'i meant knight f3' }
+export function parseYesNoWithRemainder(transcript) {
+  const raw = String(transcript || '');
+  const lower = raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  const cleaned = lower.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const tokens = cleaned ? cleaned.split(' ') : [];
+  const yesSet = new Set(['y','yes','yeah','yep','yup','correct','right','ok','okay','sure','affirmative','si']);
+  const noSet = new Set(['n','no','nope','negative','incorrect','wrong','nah']);
+
+  const noIdx = [];
+  const yesIdx = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (noSet.has(t)) noIdx.push(i);
+    else if (yesSet.has(t)) yesIdx.push(i);
+  }
+
+  let decision = null;
+  if (noIdx.length) decision = 'no';
+  else if (yesIdx.length) decision = 'yes';
+  else return { decision: null, remainder: '' };
+
+  if (decision !== 'no') {
+    return { decision: 'yes', remainder: '' };
+  }
+
+  // Build remainder after the last 'no' token
+  let remainder = tokens.slice(noIdx[noIdx.length - 1] + 1).join(' ').trim();
+  if (!remainder) return { decision: 'no', remainder: '' };
+
+  // Drop common filler openings like "i meant", "it's", "my move is", "play", "move", etc.
+  const dropPatterns = [
+    /^(?:i\s+meant\s+to\s+say|i\s+meant|i\s+mean|i\s+said)\b\s*/i,
+    /^(?:meant|mean|said)\b\s*/i,
+    /^(?:it(?:'|\s*i)?s|it\s+was)\b\s*/i,
+    /^(?:my\s+move\s+is|the\s+move\s+is)\b\s*/i,
+    /^(?:just|please|actually|well|uh|um)\b\s*/i,
+    /^(?:play|move|make|do|take|go(?:\s+to)?)\b\s*/i,
+    /^(?:i\s+(?:want|wanted|wanna)\s*(?:to)?)\b\s*/i
+  ];
+  let prev;
+  do {
+    prev = remainder;
+    for (const re of dropPatterns) remainder = remainder.replace(re, '');
+    remainder = remainder.replace(/^\s+/, '');
+  } while (remainder !== prev && remainder.length);
+
+  return { decision: 'no', remainder: remainder.trim() };
+}

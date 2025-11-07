@@ -1,6 +1,6 @@
 import { loadChessLibraries } from './chesslib.js';
 import { LocalRecorder, normalizeSpeechToCandidates } from './audio.js';
-import { humanizeMoveFromFen, parseMoveToUCI as parseMoveToUCIFen, findBestMatchingMoveSuggestion as suggestMoveFromFen, resolveImplicitDestination as resolveImplicitFromFen, decideYesNo } from './voice_moves.js';
+import { humanizeMoveFromFen, parseMoveToUCI as parseMoveToUCIFen, findBestMatchingMoveSuggestion as suggestMoveFromFen, resolveImplicitDestination as resolveImplicitFromFen, parseYesNoWithRemainder } from './voice_moves.js';
 
 class BlindfoldChessApp {
     constructor() {
@@ -39,7 +39,7 @@ class BlindfoldChessApp {
         this._boardObserver = null;
         // STT configuration (model selection moved from UI to code)
         this.sttBackend = 'whisper'; // 'whisper' or 'vosk'
-        this.sttModel = 'medium';     // e.g., 'small', 'medium', 'large' or 'auto'
+        this.sttModel = 'small';     // e.g., 'small', 'medium', 'large' or 'auto'
         
         this.initializeApp();
     }
@@ -329,6 +329,7 @@ class BlindfoldChessApp {
                     <button type="button" class="theme-toggle" id="themeToggle">
                         <span class="sr-only">Toggle dark mode</span>
                     </button>
+                    <button type="button" class="help-toggle" id="helpToggle" aria-label="Help" title="Help">?</button>
                     <div class="logo-pair">
                         <img src="/static/icons/white_horse_right-removebg.png" class="logo-img left" alt="" aria-hidden="true">
                         <h1>Blindfold Chess Training</h1>
@@ -395,6 +396,7 @@ class BlindfoldChessApp {
         });
 
         this.attachThemeToggle();
+        this.attachHelpToggle();
         this.syncPieceToggleButtons();
         this.syncVoiceToggleButton();
     }
@@ -417,6 +419,7 @@ class BlindfoldChessApp {
                     <button type="button" class="theme-toggle" id="themeToggle">
                         <span class="sr-only">Toggle dark mode</span>
                     </button>
+                    <button type="button" class="help-toggle" id="helpToggle" aria-label="Help" title="Help">?</button>
                     <div class="logo-pair">
                         <img src="/static/icons/white_horse_right-removebg.png" class="logo-img left" alt="" aria-hidden="true">
                         <h1>Blindfold Chess Training</h1>
@@ -494,7 +497,7 @@ class BlindfoldChessApp {
                         <h3>Chat Assistant</h3>
                         <div class="chat-messages" id="chatMessages"></div>
                         <div class="chat-input-container">
-                            <input type="text" class="chat-input" id="chatInput" placeholder="Type RECAP, TEST, or ask about the position...">
+                            <input type="text" class="chat-input" id="chatInput" placeholder="Type HELP to learn how to use the chat">
                             <button class="send-button" id="sendButton">Send</button>
                         </div>
                     </div>
@@ -544,7 +547,18 @@ class BlindfoldChessApp {
         const sendMessage = () => {
             if (!chatInput) return;
             const message = chatInput.value.trim();
-            if (message && this.ws && this.ws.readyState === WebSocket.OPEN) {
+            if (!message) return;
+
+            const lower = message.toLowerCase();
+            if (lower === 'help' || lower === '/help') {
+                // Show help locally in chat (do not hit server)
+                this.addChatMessage(message, 'user');
+                this.addChatMessage(this.getHelpText(), 'assistant');
+                chatInput.value = '';
+                return;
+            }
+
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(JSON.stringify({
                     type: 'chat',
                     message: message
@@ -604,6 +618,7 @@ class BlindfoldChessApp {
         }
 
         this.attachThemeToggle();
+        this.attachHelpToggle();
         this.syncPieceToggleButtons();
         this.syncVoiceToggleButton();
     }
@@ -1413,6 +1428,73 @@ class BlindfoldChessApp {
         this.updateThemeToggleIcon();
     }
 
+    // ---- Help UI ----
+    attachHelpToggle() {
+        const btn = document.getElementById('helpToggle');
+        if (!btn) return;
+        btn.onclick = (e) => {
+            e.preventDefault();
+            this.openHelpModal();
+        };
+    }
+
+    getHelpText() {
+        return [
+            'Available commands:',
+            '- HELP: Show this help.',
+            '- RECAP: Summarize the move history.',
+            '- TEST: Start a blindfold test. Variants: "test checks (white/black)", "test captures (white/black)", "test where", "test what".',
+            '- Ask questions: e.g., "Where is the white queen?", "What is in e4?"',
+            '- Voice only: Say "Repeat" to replay the last voice message.',
+            '- Voice only: Say "Undo" or "take back" to undo your last move.'
+        ].join('\n');
+    }
+
+    showHelpInChat(source = 'chat') {
+        try {
+            this.addChatMessage('help', 'user');
+        } catch {}
+        this.addChatMessage(this.getHelpText(), 'assistant');
+        if (source === 'voice') {
+            this.requestTts('Help. Type recap, test, or ask a question. Say repeat to replay, say undo to take back.');
+        }
+    }
+
+    openHelpModal() {
+        let overlay = document.getElementById('helpModalOverlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'helpModalOverlay';
+            overlay.className = 'help-modal-overlay';
+            overlay.innerHTML = `
+                <div class="help-modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+                    <div class="help-modal-header">
+                        <h3 id="helpTitle">Help</h3>
+                        <button type="button" class="help-close" id="helpCloseBtn" aria-label="Close">×</button>
+                    </div>
+                    <div class="help-modal-body">
+                        <div class="help-text" id="helpText"></div>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) this.closeHelpModal();
+            });
+        }
+        const txt = this.getHelpText();
+        const helpTextEl = overlay.querySelector('#helpText');
+        if (helpTextEl) helpTextEl.textContent = txt;
+        const closeBtn = overlay.querySelector('#helpCloseBtn');
+        if (closeBtn) closeBtn.onclick = () => this.closeHelpModal();
+        overlay.classList.add('open');
+        try { closeBtn && closeBtn.focus(); } catch {}
+    }
+
+    closeHelpModal() {
+        const overlay = document.getElementById('helpModalOverlay');
+        if (overlay) overlay.classList.remove('open');
+    }
+
     toggleTts() {
         this.ttsEnabled = !this.ttsEnabled;
         if (!this.ttsEnabled) {
@@ -1571,6 +1653,11 @@ class BlindfoldChessApp {
                 this.repeatLastTts();
                 return;
             }
+            // Local client command: Help
+            if (chatMessage === 'help') {
+                this.showHelpInChat('voice');
+                return;
+            }
             if (this.awaitingTestAnswer || chatMessage) {
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     const msg = this.awaitingTestAnswer ? sttText : chatMessage;
@@ -1601,6 +1688,9 @@ class BlindfoldChessApp {
 
         // Repeat last spoken TTS
         if (s === 'repeat' || s.includes('repeat')) return 'repeat';
+
+        // Help
+        if (/\bhelp\b/.test(s)) return 'help';
 
         // Test variants
         if (s === 'test' || s.startsWith('test ')) {
@@ -1747,21 +1837,58 @@ class BlindfoldChessApp {
     // Handle yes/no response for a pending move suggestion
     handlePendingMoveConfirmation(sttText) {
         if (!this.pendingMoveConfirm) return false;
-        const decision = decideYesNo(sttText); // 'yes' | 'no' | null
+        const parsed = parseYesNoWithRemainder(sttText); // { decision, remainder }
         const suggestion = this.pendingMoveConfirm;
-        // Clear suggestion now regardless
+        // Clear suggestion now regardless; we may set a new one below
         this.pendingMoveConfirm = null;
-        if (decision === 'yes') {
+
+        if (parsed.decision === 'yes') {
             const spoken = suggestion.spoken || this.humanizeMove(suggestion.san) || this.humanizeMove(suggestion.uci);
             this.requestTts(`Playing ${spoken}.`);
             this.submitManualMove(suggestion.uci, 'voice');
             return true;
         }
-        if (decision === 'no') {
+
+        if (parsed.decision === 'no') {
+            const remainder = (parsed.remainder || '').trim();
+            if (remainder) {
+                // Try to parse the remainder directly as a move (coordinate or SAN)
+                const remainderCandidates = [];
+                const seen = new Set();
+                const addCand = (c) => { const t = (c || '').trim(); if (t && !seen.has(t)) { seen.add(t); remainderCandidates.push(t); } };
+                addCand(remainder);
+                try {
+                    const norm = normalizeSpeechToCandidates(remainder) || [];
+                    for (const c of norm) addCand(c);
+                } catch {}
+
+                for (const cand of remainderCandidates) {
+                    const uci = this.parseMoveToUCI(cand);
+                    if (uci) {
+                        const spoken = this.humanizeMove(uci);
+                        if (spoken) this.requestTts(`Playing ${spoken}.`);
+                        this.submitManualMove(cand, 'voice');
+                        return true;
+                    }
+                }
+
+                // Couldn't parse remainder; try suggesting based on the remainder text
+                const altSuggestion = this.findBestMatchingMoveSuggestion(remainder);
+                if (altSuggestion && altSuggestion.score >= 0.45) {
+                    const spoken = altSuggestion.spoken || this.humanizeMove(altSuggestion.san) || this.humanizeMove(altSuggestion.uci);
+                    this.pendingMoveConfirm = altSuggestion;
+                    this.requestTts(`Did you mean ${spoken}? Please say yes or no.`);
+                    this.showStatusMessage(`Suggestion: ${spoken}. Say yes or no.`, 'info');
+                    return true;
+                }
+            }
+
+            // No usable remainder or could not parse/suggest — ask to repeat the move
             this.requestTts('Okay. Please say the move again.');
             return true;
         }
-        // ask again
+
+        // Unknown: ask again with the original suggestion
         const spoken = suggestion.spoken || this.humanizeMove(suggestion.san) || this.humanizeMove(suggestion.uci);
         this.pendingMoveConfirm = suggestion;
         this.requestTts(`Please answer yes or no. Did you mean ${spoken}?`);

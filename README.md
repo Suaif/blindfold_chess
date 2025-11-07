@@ -77,6 +77,14 @@ The application UI will now be available at **http://localhost:8000**
 ## Using in the UI
 
 Press the record button, dictate the move or command, then press the record button again.
+
+- If your spoken move is recognized directly, the app will say “Playing [move]” and make it.
+- If it proposes a move and asks “Did you mean [move]?”, you can answer in one turn:
+  - “Yes” → it plays the suggestion.
+  - “No, I meant [your move]” → it tries that move immediately (e.g., “No, I meant knight f3”). If parsing fails, it suggests based on your remainder.
+- Say “repeat” to replay the last spoken output.
+- Say “undo” (or “take back”) to undo your last move.
+
 When asking for a test question, you can add `captures`/`check`/`what`/`where` and `black`/`white` to specify the kind of question you want.
 
 ## Code Organization

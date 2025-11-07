@@ -235,6 +235,30 @@ body {
     -webkit-touch-callout: none;
 }
 
+/* Help button (top-right) */
+.help-toggle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.85);
+    color: #2d3748;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 700;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    z-index: 10;
+}
+.help-toggle:hover { transform: scale(1.05); box-shadow: 0 6px 12px rgba(0,0,0,0.2); }
+.help-toggle:active { transform: scale(0.97); }
+.help-toggle:focus-visible { outline: 3px solid #3182ce; outline-offset: 2px; }
+
 /* Manual move UI removed */
 
 /* Board actions: 3 circular buttons under the board */
@@ -503,6 +527,7 @@ body {
     max-width: 90%; /* keep current maximum width */
     word-wrap: break-word;
     overflow-wrap: anywhere;
+    white-space: pre-wrap; /* preserve newlines in multi-line messages */
 }
 
 .chat-message.user {
@@ -735,6 +760,12 @@ body.dark-mode .logo-pair h1 {
   color: #f8fafc;        /* light text for dark background */
 }
 body.dark-mode .theme-toggle {
+    background: rgba(15, 23, 42, 0.9);
+    color: #f8fafc;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+body.dark-mode .help-toggle {
     background: rgba(15, 23, 42, 0.9);
     color: #f8fafc;
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
@@ -1065,6 +1096,56 @@ body.dark-mode .chessboard-63f37 {
 .hidden {
     display: none !important;
 }
+
+/* Help modal */
+.help-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.help-modal-overlay.open { display: flex; }
+
+.help-modal {
+    background: #ffffff;
+    color: #1f2937;
+    border-radius: 12px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    width: min(90vw, 520px);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+.help-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.help-modal-header h3 { margin: 0; }
+.help-close {
+    border: none;
+    background: transparent;
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
+    color: #374151;
+}
+.help-modal-body { padding: 14px 16px 18px; }
+.help-text { white-space: pre-wrap; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 0.95rem; line-height: 1.4; }
+
+/* Dark mode modal */
+body.dark-mode .help-modal {
+    background: #1f2937;
+    color: #e2e8f0;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+}
+body.dark-mode .help-modal-header { border-bottom-color: #2d3748; }
+body.dark-mode .help-close { color: #e2e8f0; }
 
 /* Hide chess pieces by targeting the chessboard image pieces inserted by Chessboard.js */
 /* chessboard.js may render pieces as <img class="piece"> or as divs with background-image
