@@ -40,7 +40,7 @@ class BlindfoldChessApp {
         // STT configuration (model selection moved from UI to code)
         this.sttBackend = 'whisper'; // 'whisper' or 'vosk'
         this.sttModel = 'small';     // e.g., 'small', 'medium', 'large' or 'auto'
-        
+
         this.initializeApp();
     }
 
@@ -49,7 +49,7 @@ class BlindfoldChessApp {
         if (!this._audioCtx) {
             try {
                 this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            } catch {}
+            } catch { }
         }
         return this._audioCtx;
     }
@@ -81,13 +81,13 @@ class BlindfoldChessApp {
         this.showSetupScreen();
         this.connectWebSocket();
     }
-    
+
     connectWebSocket() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws`;
-        
+
         this.ws = new WebSocket(wsUrl);
-        
+
         this.ws.onopen = () => {
             console.log('Connected to chess server');
             this.connected = true;
@@ -99,31 +99,31 @@ class BlindfoldChessApp {
                 startBtn.textContent = 'Start Game';
             }
         };
-        
+
         this.ws.onclose = () => {
             console.log('Disconnected from chess server');
             this.connected = false;
             // Attempt to reconnect after 3 seconds
             setTimeout(() => this.connectWebSocket(), 3000);
         };
-        
+
         this.ws.onerror = (error) => {
             console.error('WebSocket error:', error);
             this.showStatusMessage('Connection error. Please refresh the page.', 'error');
         };
-        
+
         this.ws.onmessage = (event) => {
             const message = JSON.parse(event.data);
             this.handleWebSocketMessage(message);
         };
     }
-    
+
     handleWebSocketMessage(message) {
         switch (message.type) {
             case 'connected':
                 this.showStatusMessage('Connected to server', 'success');
                 break;
-                
+
             case 'game_started': {
                 this.playerColor = message.player_color;
                 this.engineElo = message.engine_elo;
@@ -141,7 +141,7 @@ class BlindfoldChessApp {
                 this.updateGameControls();
                 break;
             }
-                
+
             case 'position_update': {
                 const prevLen = Array.isArray(this.latestMoveHistory) ? this.latestMoveHistory.length : 0;
                 this.currentFen = message.fen;
@@ -171,15 +171,15 @@ class BlindfoldChessApp {
                 this.updateGameControls();
                 break;
             }
-                
+
             case 'invalid_move':
                 this.showStatusMessage(`Invalid move: ${message.message}`, 'error');
                 break;
-                
+
             case 'game_over':
                 this.handleGameOver(message);
                 break;
-                
+
             case 'chat_response':
                 this.addChatMessage(message.user_message, 'user');
                 this.addChatMessage(message.ai_response, 'assistant');
@@ -191,9 +191,9 @@ class BlindfoldChessApp {
                     } else if (/\bCorrect answer:\b/i.test(resp) || /\bCorrect\b|\bIncorrect\b/.test(resp)) {
                         this.awaitingTestAnswer = false;
                     }
-                } catch {}
+                } catch { }
                 break;
-                
+
             case 'error':
                 this.showStatusMessage(message.message, 'error');
                 break;
@@ -221,7 +221,7 @@ class BlindfoldChessApp {
             if (this.ttsAudio) {
                 try {
                     this.ttsAudio.pause();
-                } catch {}
+                } catch { }
                 this.ttsAudio = null;
             }
             return;
@@ -313,7 +313,7 @@ class BlindfoldChessApp {
         const fen = this.game ? this.game.fen() : null;
         try { return humanizeMoveFromFen(fen, moveText, Chess); } catch { return String(moveText || ''); }
     }
-    
+
     showSetupScreen() {
         if (this.boundKeyHandler) {
             window.removeEventListener('keydown', this.boundKeyHandler);
@@ -336,39 +336,48 @@ class BlindfoldChessApp {
                         <img src="/static/icons/white_horse_left-removebg.png" class="logo-img right" alt="" aria-hidden="true">
                     </div>
                 </div>
-                <div class="setup-screen">
-                    <h2>Game Setup</h2>
-                    
-                    <div class="setup-group">
-                        <label>Select Your Color:</label>
-                        <div class="color-selector">
-                            <div class="color-option selected" data-color="white">
-                                White
-                            </div>
-                            <div class="color-option" data-color="black">
-                                Black
+                <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; max-width: 1000px; margin: 0 auto;">
+                    <div class="setup-screen" style="min-height: 400px;">
+                        <h2>Play Game</h2>
+                        
+                        <div class="setup-group">
+                            <label>Select Your Color:</label>
+                            <div class="color-selector">
+                                <div class="color-option selected" data-color="white">
+                                    White
+                                </div>
+                                <div class="color-option" data-color="black">
+                                    Black
+                                </div>
                             </div>
                         </div>
+                        
+                        <div class="setup-group">
+                            <label>Opponent Strength (ELO):</label>
+                            <input type="range" class="elo-slider" min="1320" max="2800" value="1350" id="eloSlider">
+                            <div class="elo-display" id="eloDisplay">1350 ELO</div>
+                        </div>
+                        
+                        <button class="start-button" id="startButton" ${!this.connected ? 'disabled' : ''}>
+                            ${this.connected ? 'Start Game' : 'Connecting...'}
+                        </button>
                     </div>
                     
-                    <div class="setup-group">
-                        <label>Opponent Strength (ELO):</label>
-                        <input type="range" class="elo-slider" min="1320" max="2800" value="1350" id="eloSlider">
-                        <div class="elo-display" id="eloDisplay">1350 ELO</div>
+                    <div class="setup-screen" style="min-height: 400px;">
+                        <h2>Practice Mode</h2>
+                        <p style="margin-bottom: 15px; color: #718096; font-size: 14px;">Improve your square identification skills!</p>
+                        
+                        <button class="start-button" id="practiceButton" style="background: #3182ce;">
+                            Start Practice
+                        </button>
                     </div>
-                    
-                    <button class="start-button" id="startButton" ${!this.connected ? 'disabled' : ''}>
-                        ${this.connected ? 'Start Game' : 'Connecting...'}
-                    </button>
-                    
-                    <div id="setupStatus"></div>
                 </div>
             </div>
         `;
-        
+
         this.setupEventListeners();
     }
-    
+
     setupEventListeners() {
         // Color selection
         document.querySelectorAll('.color-option').forEach(option => {
@@ -378,7 +387,7 @@ class BlindfoldChessApp {
                 this.playerColor = e.target.dataset.color;
             });
         });
-        
+
         // ELO slider
         const eloSlider = document.getElementById('eloSlider');
         const eloDisplay = document.getElementById('eloDisplay');
@@ -386,7 +395,7 @@ class BlindfoldChessApp {
             this.engineElo = parseInt(e.target.value);
             eloDisplay.textContent = `${this.engineElo} ELO`;
         });
-        
+
         // Start button
         const startButton = document.getElementById('startButton');
         startButton.addEventListener('click', () => {
@@ -395,12 +404,20 @@ class BlindfoldChessApp {
             }
         });
 
+        // Practice button
+        const practiceButton = document.getElementById('practiceButton');
+        if (practiceButton) {
+            practiceButton.addEventListener('click', () => {
+                window.location.href = '/practice';
+            });
+        }
+
         this.attachThemeToggle();
         this.attachHelpToggle();
         this.syncPieceToggleButtons();
         this.syncVoiceToggleButton();
     }
-    
+
     startNewGame() {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({
@@ -410,7 +427,7 @@ class BlindfoldChessApp {
             }));
         }
     }
-    
+
     showMainInterface() {
         const app = document.getElementById('app');
         app.innerHTML = `
@@ -422,7 +439,7 @@ class BlindfoldChessApp {
                     <button type="button" class="help-toggle" id="helpToggle" aria-label="Help" title="Help">?</button>
                     <div class="logo-pair">
                         <img src="/static/icons/white_horse_right-removebg.png" class="logo-img left" alt="" aria-hidden="true">
-                        <h1>Blindfold Chess Training</h1>
+                        <h1 class="clickable-title" id="headerTitle">Blindfold Chess Training</h1>
                         <img src="/static/icons/white_horse_left-removebg.png" class="logo-img right" alt="" aria-hidden="true">
                     </div>
                 </div>
@@ -506,10 +523,10 @@ class BlindfoldChessApp {
                 <div id="statusMessages"></div>
             </div>
         `;
-        
+
         this.setupMainInterfaceEventListeners();
     }
-    
+
     setupMainInterfaceEventListeners() {
         const undoButton = document.getElementById('undoButton');
         if (undoButton) {
@@ -533,17 +550,32 @@ class BlindfoldChessApp {
                 this.resetGame();
             });
         }
-        
+
         const newGameButton = document.getElementById('newGameButton');
         if (newGameButton) {
             newGameButton.addEventListener('click', () => {
                 this.showSetupScreen();
             });
         }
+
+        // Header title click - return to portal
+        const headerTitle = document.getElementById('headerTitle');
+        if (headerTitle) {
+            headerTitle.addEventListener('click', () => {
+                if (this.gameActive) {
+                    if (confirm('Are you sure you want to leave? Your current game will be lost.')) {
+                        window.location.href = '/';
+                    }
+                } else {
+                    window.location.href = '/';
+                }
+            });
+        }
+
         // Chat input
         const chatInput = document.getElementById('chatInput');
         const sendButton = document.getElementById('sendButton');
-        
+
         const sendMessage = () => {
             if (!chatInput) return;
             const message = chatInput.value.trim();
@@ -566,7 +598,7 @@ class BlindfoldChessApp {
                 chatInput.value = '';
             }
         };
-        
+
         if (sendButton) sendButton.addEventListener('click', sendMessage);
         if (chatInput) {
             chatInput.addEventListener('keypress', (e) => {
@@ -622,7 +654,7 @@ class BlindfoldChessApp {
         this.syncPieceToggleButtons();
         this.syncVoiceToggleButton();
     }
-    
+
     initializeBoard(fen) {
         // Load chess.js and chessboard.js libraries
         if (typeof Chess === 'undefined' || typeof Chessboard === 'undefined') {
@@ -631,12 +663,12 @@ class BlindfoldChessApp {
             this.createBoard(fen);
         }
     }
-    
-    
-    
+
+
+
     createBoard(fen) {
         this.game = new Chess(fen);
-        
+
         const config = {
             position: fen,
             pieceTheme: '/static/img/chesspieces/wikipedia/{piece}.png',
@@ -675,13 +707,13 @@ class BlindfoldChessApp {
                     to: target,
                     promotion: 'q' // Auto-promote to queen
                 });
-                
+
                 if (move === null) {
                     this.isDragging = false;
                     this.dragSourceSquare = null;
                     return 'snapback';
                 }
-                
+
                 // Local move succeeded: play immediate sound
                 this.playMoveSound();
                 this.playedLocalMoveSound = true;
@@ -704,7 +736,7 @@ class BlindfoldChessApp {
                 this.dragCancelled = false;
             }
         };
-        
+
         this.board = new Chessboard('chessboard', config);
 
         // Apply visibility immediately after the board is created
@@ -783,7 +815,7 @@ class BlindfoldChessApp {
             };
             el.addEventListener('touchstart', preventTouchScroll, { passive: false, capture: true });
             el.addEventListener('touchmove', preventTouchScroll, { passive: false, capture: true });
-        } catch (_) {}
+        } catch (_) { }
 
         const isInsideBoard = (target) => {
             if (!target) return false;
@@ -872,7 +904,7 @@ class BlindfoldChessApp {
                 const isOwn = (this.playerColor === 'white' ? 'w' : 'b') === piece.color;
                 if (!isOwn) return;
                 this.showPossibleMovesForSquare(sq);
-            } catch {}
+            } catch { }
         });
         // Clear highlights when mouse is released and no drag occurred
         window.addEventListener('mouseup', () => {
@@ -905,7 +937,7 @@ class BlindfoldChessApp {
                         this.board.position(this.game.fen());
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
         };
         const auxIfOverBoard = (ev) => {
             if (ev && ev.button !== 2) return;
@@ -935,7 +967,7 @@ class BlindfoldChessApp {
                     if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
                 }, { capture: true });
                 if (el.dataset) el.dataset.hardenedContext = '1';
-            } catch (_) {}
+            } catch (_) { }
         };
         // Images and divs that represent pieces (background-image)
         const imgs = root.querySelectorAll('img, .piece, [class*="piece-"]');
@@ -948,7 +980,7 @@ class BlindfoldChessApp {
     // Observe dynamic DOM changes to re-apply hardening as pieces render/animate
     observeBoardForPieceElements() {
         if (this._boardObserver) {
-            try { this._boardObserver.disconnect(); } catch {}
+            try { this._boardObserver.disconnect(); } catch { }
             this._boardObserver = null;
         }
         const root = this.getBoardElement();
@@ -1018,7 +1050,7 @@ class BlindfoldChessApp {
             btn.innerHTML = content;
         });
     }
-    
+
     syncVoiceToggleButton() {
         const btn = document.getElementById('voiceToggle');
         if (!btn) return;
@@ -1033,7 +1065,7 @@ class BlindfoldChessApp {
         `.trim();
         btn.innerHTML = content;
     }
-    
+
     resetTimelineState() {
         this.positionTimeline = [];
         this.timelineIndex = 0;
@@ -1139,8 +1171,8 @@ class BlindfoldChessApp {
             const moveNumber = Math.floor(plyIndex / 2) + 1;
             const side = plyIndex % 2 === 0 ? 'White' : 'Black';
             // this.showStatusMessage(`Reviewing move ${moveNumber} (${side}). Press Right Arrow to return to live position.`, 'info');
-        // } else if (wasReviewing) {
-        //     this.showStatusMessage('Back to live position.', 'info');
+            // } else if (wasReviewing) {
+            //     this.showStatusMessage('Back to live position.', 'info');
         }
     }
 
@@ -1165,7 +1197,7 @@ class BlindfoldChessApp {
             this.stepTimeline(1);
         }
     }
-    
+
     updateBoard(fen) {
         this.currentFen = fen;
         if (this.board) {
@@ -1260,7 +1292,7 @@ class BlindfoldChessApp {
     parseMoveToUCI(moveText) {
         try { return parseMoveToUCIFen(this.game ? this.game.fen() : null, moveText, Chess); } catch { return null; }
     }
-    
+
     updateMoveList(moveHistory) {
         const moveList = document.getElementById('moveList');
         if (!moveList) return;
@@ -1305,29 +1337,29 @@ class BlindfoldChessApp {
             }
         }
     }
-    
+
     updatePositionStats(data) {
         // This could be used to show additional position information
         // For now, we'll just log it for debugging
         console.log('Position stats updated:', data);
     }
-    
+
     addChatMessage(message, sender) {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
-        
+
         const messageDiv = document.createElement('div');
         messageDiv.className = `chat-message ${sender}`;
         messageDiv.textContent = message;
-        
+
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
-    
+
     handleGameOver(message) {
         this.gameActive = false;
         let resultMessage = '';
-        
+
         if (message.result === 'checkmate') {
             const winner = message.winner;
             const playerWon = (winner === this.playerColor);
@@ -1335,11 +1367,11 @@ class BlindfoldChessApp {
         } else {
             resultMessage = 'Game ended in a draw!';
         }
-        
+
         this.showStatusMessage(resultMessage, 'info');
         this.addChatMessage(`Game Over: ${resultMessage}`, 'assistant');
     }
-    
+
     resetGame() {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify({
@@ -1453,7 +1485,7 @@ class BlindfoldChessApp {
     showHelpInChat(source = 'chat') {
         try {
             this.addChatMessage('help', 'user');
-        } catch {}
+        } catch { }
         this.addChatMessage(this.getHelpText(), 'assistant');
         if (source === 'voice') {
             this.requestTts('Help. Type recap, test, or ask a question. Say repeat to replay, say undo to take back.');
@@ -1487,7 +1519,7 @@ class BlindfoldChessApp {
         const closeBtn = overlay.querySelector('#helpCloseBtn');
         if (closeBtn) closeBtn.onclick = () => this.closeHelpModal();
         overlay.classList.add('open');
-        try { closeBtn && closeBtn.focus(); } catch {}
+        try { closeBtn && closeBtn.focus(); } catch { }
     }
 
     closeHelpModal() {
@@ -1553,7 +1585,7 @@ class BlindfoldChessApp {
             }, animMs);
         }, hideDelay);
     }
-    
+
     updateGameControls() {
         const voiceBtn = document.getElementById('voiceMoveButton');
         const undoButton = document.getElementById('undoButton');
@@ -1588,7 +1620,7 @@ class BlindfoldChessApp {
         if (!playerTurn) {
             return this.showStatusMessage("It's not your turn yet.", 'info');
         }
-        
+
         this.isListening = true;
         const voiceText = document.getElementById('voiceText');
         const btn = document.getElementById('voiceMoveButton');
@@ -1707,7 +1739,7 @@ class BlindfoldChessApp {
         return null;
     }
 
-    
+
 
     handleSpokenMove(result) {
         const payload = typeof result === "string" ? { text: result } : (result || {});
@@ -1785,7 +1817,7 @@ class BlindfoldChessApp {
                         normalized: payload.normalized || null,
                         success: true,
                     }),
-                }).catch(() => {});
+                }).catch(() => { });
 
                 this.submitManualMove(cand, 'voice');
                 return;
@@ -1795,7 +1827,7 @@ class BlindfoldChessApp {
         console.log('[STT] No valid candidate matched board state');
 
         // Fallback: suggest the closest legal move by similarity to transcript
-        const suggestion = (function(fen, t){ try { return suggestMoveFromFen(fen, t, Chess); } catch { return null; } })(this.game ? this.game.fen() : null, text);
+        const suggestion = (function (fen, t) { try { return suggestMoveFromFen(fen, t, Chess); } catch { return null; } })(this.game ? this.game.fen() : null, text);
         if (suggestion && suggestion.score >= 0.45) {
             this.pendingMoveConfirm = suggestion; // {uci, san, spoken, score}
             const spoken = suggestion.spoken || this.humanizeMove(suggestion.san) || this.humanizeMove(suggestion.uci);
@@ -1817,7 +1849,7 @@ class BlindfoldChessApp {
                 normalized: payload.normalized || null,
                 success: false,
             }),
-        }).catch(() => {});
+        }).catch(() => { });
 
         this.showStatusMessage('Could not parse spoken move. Try again or type it.', 'error');
     }
@@ -1860,7 +1892,7 @@ class BlindfoldChessApp {
                 try {
                     const norm = normalizeSpeechToCandidates(remainder) || [];
                     for (const c of norm) addCand(c);
-                } catch {}
+                } catch { }
 
                 for (const cand of remainderCandidates) {
                     const uci = this.parseMoveToUCI(cand);

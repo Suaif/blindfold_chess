@@ -149,20 +149,66 @@ class GameState:
         self.game_active = True
         return True, undone
 
+class PracticeState:
+    def __init__(self):
+        self.active = False
+        self.target_square = None
+        self.correct_count = 0
+        self.total_count = 0
+        self.timer_duration = 30  # Default 30 seconds
+        
+    def start_session(self, timer_duration=30):
+        """Start a new practice session."""
+        self.active = True
+        self.correct_count = 0
+        self.total_count = 0
+        self.timer_duration = timer_duration
+        self.generate_new_square()
+        
+    def generate_new_square(self):
+        """Generate a random chess square (a-h, 1-8)."""
+        import random
+        files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+        ranks = ['1', '2', '3', '4', '5', '6', '7', '8']
+        self.target_square = random.choice(files) + random.choice(ranks)
+        return self.target_square
+        
+    def check_square(self, clicked_square):
+        """Check if the clicked square is correct."""
+        is_correct = clicked_square.lower() == self.target_square.lower()
+        self.total_count += 1
+        if is_correct:
+            self.correct_count += 1
+        return is_correct
+        
+    def end_session(self):
+        """End the practice session and return final stats."""
+        self.active = False
+        return {
+            'correct': self.correct_count,
+            'total': self.total_count,
+            'percentage': round((self.correct_count / self.total_count * 100) if self.total_count > 0 else 0, 1)
+        }
+
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Set[WebSocket] = set()
         self.game_states: Dict[WebSocket, GameState] = {}
+        self.practice_states: Dict[WebSocket, PracticeState] = {}
     
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.add(websocket)
         self.game_states[websocket] = GameState()
+        self.practice_states[websocket] = PracticeState()
     
     def disconnect(self, websocket: WebSocket):
         if websocket in self.game_states:
             self.game_states[websocket].close_engine()
             del self.game_states[websocket]
+        if websocket in self.practice_states:
+            del self.practice_states[websocket]
         self.active_connections.discard(websocket)
     
     async def broadcast_to_client(self, websocket: WebSocket, message: dict):
@@ -170,6 +216,7 @@ class ConnectionManager:
             await websocket.send_json(message)
         except:
             self.disconnect(websocket)
+
 
 manager = ConnectionManager()
 
@@ -417,6 +464,29 @@ async def get_index():
     </html>
     """
 
+@app.get("/practice", response_class=HTMLResponse)
+async def get_practice():
+    return """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Practice Mode - Blindfold Chess Training</title>
+        <link rel="icon" type="image/x-icon" href="static/icons/black_icon.ico">
+        <link rel="stylesheet" href="/static/css/style.css">
+    </head>
+    <body>
+        <div id="app">
+            <h1>Loading Practice Mode...</h1>
+            <p>Please wait while the practice mode loads.</p>
+        </div>
+        <script type="module" src="/static/js/practice.js"></script>
+    </body>
+    </html>
+    """
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -561,6 +631,52 @@ async def websocket_endpoint(websocket: WebSocket):
                     "last_move": None,
                     "move_history": game_state.move_history,
                     "undo_count": undone,
+                })
+            
+            elif message_type == "start_practice":
+                practice_state = manager.practice_states[websocket]
+                timer_duration = data.get("timer_duration", 30)
+                practice_state.start_session(timer_duration)
+                
+                await manager.broadcast_to_client(websocket, {
+                    "type": "practice_started",
+                    "target_square": practice_state.target_square,
+                    "timer_duration": practice_state.timer_duration,
+                    "score": {
+                        "correct": practice_state.correct_count,
+                        "total": practice_state.total_count
+                    }
+                })
+            
+            elif message_type == "square_click":
+                practice_state = manager.practice_states[websocket]
+                if not practice_state.active:
+                    continue
+                    
+                clicked_square = data.get("square", "")
+                is_correct = practice_state.check_square(clicked_square)
+                
+                # Generate new square for next attempt
+                new_square = practice_state.generate_new_square()
+                
+                await manager.broadcast_to_client(websocket, {
+                    "type": "square_result",
+                    "correct": is_correct,
+                    "clicked_square": clicked_square,
+                    "target_square": new_square,
+                    "score": {
+                        "correct": practice_state.correct_count,
+                        "total": practice_state.total_count
+                    }
+                })
+            
+            elif message_type == "end_practice":
+                practice_state = manager.practice_states[websocket]
+                final_stats = practice_state.end_session()
+                
+                await manager.broadcast_to_client(websocket, {
+                    "type": "practice_ended",
+                    "stats": final_stats
                 })
             
             elif message_type == "chat":

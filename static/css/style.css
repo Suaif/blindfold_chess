@@ -9,6 +9,12 @@ body {
     background: linear-gradient(180deg, #cfe8ff 0%, #b6dcff 100%);
     min-height: 100vh;
     color: #333;
+    transform: scale(0.8);
+    transform-origin: top center;
+    width: 125%;
+    /* Compensate for the scale to maintain full width */
+    margin-left: -12.5%;
+    /* Center the scaled content */
 }
 
 .container {
@@ -40,32 +46,34 @@ body {
 }
 
 .logo-pair {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    position: relative;
 }
 
 .logo-img {
-  width: 60px;
-  height: 60px;
-  object-fit: contain;
-  opacity: 0.95;
-  transition: transform 0.3s ease, opacity 0.3s ease;
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+    opacity: 0.95;
+    transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
 .logo-img:hover {
-  opacity: 1;
-  transform: scale(1.05);
+    opacity: 1;
+    transform: scale(1.05);
 }
 
 .logo-pair h1 {
-  font-size: 2.4rem;
-  font-weight: 600;
-  margin: 0;
-  color: #1e293b;        /* dark text for light mode */
+    font-size: 2.4rem;
+    font-weight: 600;
+    margin: 0;
+    color: #1e293b;
+    /* dark text for light mode */
 }
+
 .theme-toggle {
     position: absolute;
     top: 10px;
@@ -163,7 +171,7 @@ body {
     background: white;
     border-radius: 15px;
     padding: 16px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     display: flex;
     flex-direction: column;
 }
@@ -217,8 +225,10 @@ body {
     width: 100%;
     display: flex;
     align-items: center;
-    justify-content: center;   /* center everything */
-    position: relative;        /* so we can position the button absolutely */
+    justify-content: center;
+    /* center everything */
+    position: relative;
+    /* so we can position the button absolutely */
     margin-bottom: 8px;
 }
 
@@ -228,8 +238,10 @@ body {
     margin: 0 auto;
     /* Prevent page scroll while touching/dragging on the board */
     touch-action: none;
-    -ms-touch-action: none; /* older Edge */
-    overscroll-behavior: contain; /* keep pull-to-refresh/page scroll from hijacking */
+    -ms-touch-action: none;
+    /* older Edge */
+    overscroll-behavior: contain;
+    /* keep pull-to-refresh/page scroll from hijacking */
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
@@ -255,9 +267,20 @@ body {
     transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
     z-index: 10;
 }
-.help-toggle:hover { transform: scale(1.05); box-shadow: 0 6px 12px rgba(0,0,0,0.2); }
-.help-toggle:active { transform: scale(0.97); }
-.help-toggle:focus-visible { outline: 3px solid #3182ce; outline-offset: 2px; }
+
+.help-toggle:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+}
+
+.help-toggle:active {
+    transform: scale(0.97);
+}
+
+.help-toggle:focus-visible {
+    outline: 3px solid #3182ce;
+    outline-offset: 2px;
+}
 
 /* Manual move UI removed */
 
@@ -273,7 +296,7 @@ body {
     margin: 8px auto 4px;
 }
 
-.circle-btn { 
+.circle-btn {
     width: 64px;
     height: 64px;
     border-radius: 50%;
@@ -284,27 +307,46 @@ body {
     justify-content: center;
     color: #fff;
     font-size: 24px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.18);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
     transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, filter 0.2s ease;
     user-select: none;
 }
-.circle-btn:focus-visible { outline: 3px solid rgba(99,179,237,0.9); outline-offset: 2px; }
 
-.circle-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,0,0,0.22); }
-.circle-btn:active { transform: translateY(0); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
-.circle-btn:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(0.3); }
+.circle-btn:focus-visible {
+    outline: 3px solid rgba(99, 179, 237, 0.9);
+    outline-offset: 2px;
+}
+
+.circle-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+.circle-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.circle-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    filter: grayscale(0.3);
+}
 
 /* Specific button themes */
 .record-btn {
-    background: linear-gradient(135deg, #00ff73, #00cc44); /* vivid emerald green */
+    background: linear-gradient(135deg, #00ff73, #00cc44);
+    /* vivid emerald green */
 }
 
 .undo-btn {
-    background: linear-gradient(135deg, #1a8cff, #0056ff); /* bright cobalt blue */
+    background: linear-gradient(135deg, #1a8cff, #0056ff);
+    /* bright cobalt blue */
 }
 
 .convo-btn {
-    background: linear-gradient(135deg, #a020f0, #6a00ff); /* vibrant purple for consistency */
+    background: linear-gradient(135deg, #a020f0, #6a00ff);
+    /* vibrant purple for consistency */
     color: #ffffff;
 }
 
@@ -315,13 +357,29 @@ body {
 
 
 @keyframes recordingPulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.04); }
-    100% { transform: scale(1); }
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.04);
+    }
+
+    100% {
+        transform: scale(1);
+    }
 }
 
-.btn-icon { line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
-.btn-icon svg { display: block; }
+.btn-icon {
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon svg {
+    display: block;
+}
 
 .board-row {
     width: 100%;
@@ -335,40 +393,51 @@ body {
 /* Row 1: conversation + record buttons on left group, input to the right */
 .row-voice {
     justify-content: flex-start;
-    padding-left: 16px; /* nudge a bit to the right */
+    padding-left: 16px;
+    /* nudge a bit to the right */
 }
+
 .row-voice .voice-buttons {
     display: flex;
     align-items: center;
-    gap: 18px; /* more space between convo and record */
+    gap: 18px;
+    /* more space between convo and record */
     margin-right: 12px;
 }
+
 .row-voice .voice-text-row {
     flex: 1 1 auto;
     display: flex;
     justify-content: flex-start;
 }
+
 .row-voice .voice-text-row .voice-text {
     width: 50%;
-    max-width: 260px; /* shorter to give more room to buttons */
+    max-width: 260px;
+    /* shorter to give more room to buttons */
     min-width: 160px;
 }
 
 /* Row 2: center the arrows, keep undo aligned to the right */
 .row-controls {
     justify-content: space-between;
-    padding-left: 8px; /* slight alignment with row-voice */
+    padding-left: 8px;
+    /* slight alignment with row-voice */
 }
+
 .row-controls .timeline-nav {
     flex: 1 1 auto;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 18px;
-    margin: 0; /* override previous margin */
+    margin: 0;
+    /* override previous margin */
 }
+
 .row-controls #undoButton {
-    margin-left: auto; /* push to the right */
+    margin-left: auto;
+    /* push to the right */
 }
 
 /* Timeline navigation under recognition output */
@@ -390,34 +459,48 @@ body {
     color: #111111;
     border: 3px solid #111111;
     display: grid;
-    place-items: center;          /* rock-solid centering */
+    place-items: center;
+    /* rock-solid centering */
     font-size: 24px;
     line-height: 1;
     cursor: pointer;
     transition: transform 0.12s ease, filter 0.12s ease, box-shadow 0.12s ease;
     /* layered shadow to evoke stacked keycap */
     filter: drop-shadow(0 3px 0 #111111) drop-shadow(3px 6px 0 #111111);
-    box-shadow: inset 0 0 0 0 rgba(0,0,0,0);
+    box-shadow: inset 0 0 0 0 rgba(0, 0, 0, 0);
 }
 
-.keycap-btn:hover { transform: translateY(-1px); }
-.keycap-btn:active { transform: translateY(0); }
-.keycap-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.keycap-btn:hover {
+    transform: translateY(-1px);
+}
+
+.keycap-btn:active {
+    transform: translateY(0);
+}
+
+.keycap-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
 
 .keycap-arrow {
     display: inline-block;
     line-height: 1;
-    font-weight: 900;             /* heavier glyph */
-    font-size: 30px;              /* a touch larger for clarity */
-    letter-spacing: 0;            /* keep arrow compact */
-    -webkit-text-stroke: 1.2px currentColor; /* thicker outline in WebKit */
+    font-weight: 900;
+    /* heavier glyph */
+    font-size: 30px;
+    /* a touch larger for clarity */
+    letter-spacing: 0;
+    /* keep arrow compact */
+    -webkit-text-stroke: 1.2px currentColor;
+    /* thicker outline in WebKit */
     /* Faux outline for Firefox/others to visually thicken the arrow */
     text-shadow:
-      0 0 0 currentColor,
-      -0.6px -0.6px 0 currentColor,
-       0.6px -0.6px 0 currentColor,
-      -0.6px  0.6px 0 currentColor,
-       0.6px  0.6px 0 currentColor;
+        0 0 0 currentColor,
+        -0.6px -0.6px 0 currentColor,
+        0.6px -0.6px 0 currentColor,
+        -0.6px 0.6px 0 currentColor,
+        0.6px 0.6px 0 currentColor;
 }
 
 .voice-status {
@@ -454,7 +537,8 @@ body {
 }
 
 .move-list {
-    height: 600px; /* fixed height */
+    height: 600px;
+    /* fixed height */
     overflow-y: auto;
     padding: 10px;
     background: #f7fafc;
@@ -513,27 +597,33 @@ body {
     background: #f7fafc;
     border-radius: 8px;
     margin-bottom: 15px;
-    height: 600px; /* fixed height */
+    height: 600px;
+    /* fixed height */
     display: flex;
     flex-direction: column;
-    align-items: flex-start; /* prevent stretching to full width */
+    align-items: flex-start;
+    /* prevent stretching to full width */
     gap: 8px;
 }
 
 .chat-message {
-    margin-bottom: 0; /* handled by container gap */
+    margin-bottom: 0;
+    /* handled by container gap */
     padding: 8px 12px;
     border-radius: 8px;
-    max-width: 90%; /* keep current maximum width */
+    max-width: 90%;
+    /* keep current maximum width */
     word-wrap: break-word;
     overflow-wrap: anywhere;
-    white-space: pre-wrap; /* preserve newlines in multi-line messages */
+    white-space: pre-wrap;
+    /* preserve newlines in multi-line messages */
 }
 
 .chat-message.user {
     background: #3182ce;
     color: white;
-    align-self: flex-end; /* right align without taking full width */
+    align-self: flex-end;
+    /* right align without taking full width */
     text-align: right;
 }
 
@@ -582,7 +672,7 @@ body {
     background: white;
     border-radius: 15px;
     padding: 40px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     max-width: 500px;
     margin: 0 auto;
     text-align: center;
@@ -679,9 +769,12 @@ body {
 .game-controls p {
     color: black;
     font-weight: bold;
-    font-size: 18px; /* adjust size as needed */
-    margin-bottom: 6px; /* creates the jump line/space before buttons */
+    font-size: 18px;
+    /* adjust size as needed */
+    margin-bottom: 6px;
+    /* creates the jump line/space before buttons */
 }
+
 .control-button {
     padding: 8px 16px;
     border: none;
@@ -746,19 +839,22 @@ body.dark-mode .header p {
 }
 
 body.dark-mode .logo-img {
-  filter: brightness(1.2);
+    filter: brightness(1.2);
 }
+
 body.dark-mode .logo-img.left {
-  content: url('/static/icons/black_horse_left-removebg.png');
+    content: url('/static/icons/black_horse_left-removebg.png');
 }
 
 body.dark-mode .logo-img.right {
-  content: url('/static/icons/black_horse_right-removebg.png');
+    content: url('/static/icons/black_horse_right-removebg.png');
 }
 
 body.dark-mode .logo-pair h1 {
-  color: #f8fafc;        /* light text for dark background */
+    color: #f8fafc;
+    /* light text for dark background */
 }
+
 body.dark-mode .theme-toggle {
     background: rgba(15, 23, 42, 0.9);
     color: #f8fafc;
@@ -798,7 +894,8 @@ body.dark-mode .panel-header {
 }
 
 body.dark-mode .setup-group label {
-    color: #e2e8f0;
+    color: #4a5568;
+    /* Keep dark in both modes for readability */
 }
 
 body.dark-mode .chat-input,
@@ -841,9 +938,17 @@ body.dark-mode .voice-move-button.is-recording {
 }
 
 /* Dark mode for circle buttons */
-body.dark-mode .record-btn { filter: brightness(0.95); }
-body.dark-mode .undo-btn { filter: brightness(0.95); }
-body.dark-mode .convo-btn { filter: brightness(0.95); }
+body.dark-mode .record-btn {
+    filter: brightness(0.95);
+}
+
+body.dark-mode .undo-btn {
+    filter: brightness(0.95);
+}
+
+body.dark-mode .convo-btn {
+    filter: brightness(0.95);
+}
 
 body.dark-mode .icon-toggle:focus-visible {
     outline: 3px solid #63b3ed;
@@ -941,6 +1046,7 @@ body.dark-mode .chessboard-63f37 {
     border: 3px solid #63b3ed;
     box-shadow: 0 4px 16px rgba(15, 23, 42, 0.7);
 }
+
 /* Status Messages */
 .status-message {
     padding: 10px;
@@ -977,7 +1083,8 @@ body.dark-mode .chessboard-63f37 {
     flex-direction: column;
     gap: 10px;
     z-index: 9999;
-    pointer-events: none; /* allow clicks to pass through except on the toasts */
+    pointer-events: none;
+    /* allow clicks to pass through except on the toasts */
 }
 
 /* Each toast uses existing .status-message styles plus these */
@@ -985,8 +1092,9 @@ body.dark-mode .chessboard-63f37 {
     pointer-events: auto;
     min-width: 280px;
     max-width: 380px;
-    box-shadow: 0 10px 24px rgba(0,0,0,0.2);
-    margin: 0; /* override default margin in flow */
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+    margin: 0;
+    /* override default margin in flow */
     opacity: 0;
     transform: translateY(8px);
     animation: toast-in 180ms ease-out forwards;
@@ -997,13 +1105,27 @@ body.dark-mode .chessboard-63f37 {
 }
 
 @keyframes toast-in {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 @keyframes toast-out {
-    from { opacity: 1; transform: translateY(0); }
-    to { opacity: 0; transform: translateY(8px); }
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    to {
+        opacity: 0;
+        transform: translateY(8px);
+    }
 }
 
 /* Responsive Design */
@@ -1012,7 +1134,7 @@ body.dark-mode .chessboard-63f37 {
         grid-template-columns: 1fr;
         gap: 15px;
     }
-    
+
     .panel {
         min-height: auto;
     }
@@ -1022,15 +1144,15 @@ body.dark-mode .chessboard-63f37 {
     .container {
         padding: 10px;
     }
-    
+
     .header h1 {
         font-size: 2rem;
     }
-    
+
     .setup-screen {
         padding: 20px;
     }
-    
+
     .color-selector {
         flex-direction: column;
     }
@@ -1040,18 +1162,23 @@ body.dark-mode .chessboard-63f37 {
 .chessboard-63f37 {
     border: 3px solid #4a5568;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.highlight1-32417, .highlight2-9c5d2 {
+.highlight1-32417,
+.highlight2-9c5d2 {
     box-shadow: inset 0 0 0 4px rgba(255, 255, 0, 0.4);
 }
 
 /* Move suggestion highlighting */
-#chessboard .square-55d63 { position: relative; }
+#chessboard .square-55d63 {
+    position: relative;
+}
+
 #chessboard .move-source {
     box-shadow: inset 0 0 0 4px rgba(250, 204, 21, 0.6);
 }
+
 #chessboard .move-dest::after {
     content: '';
     position: absolute;
@@ -1064,6 +1191,7 @@ body.dark-mode .chessboard-63f37 {
     transform: translate(-50%, -50%);
     pointer-events: none;
 }
+
 #chessboard .move-capture::after {
     content: '';
     position: absolute;
@@ -1089,8 +1217,13 @@ body.dark-mode .chessboard-63f37 {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .hidden {
@@ -1107,18 +1240,22 @@ body.dark-mode .chessboard-63f37 {
     justify-content: center;
     z-index: 1000;
 }
-.help-modal-overlay.open { display: flex; }
+
+.help-modal-overlay.open {
+    display: flex;
+}
 
 .help-modal {
     background: #ffffff;
     color: #1f2937;
     border-radius: 12px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
     width: min(90vw, 520px);
     max-height: 80vh;
     display: flex;
     flex-direction: column;
 }
+
 .help-modal-header {
     display: flex;
     align-items: center;
@@ -1126,7 +1263,11 @@ body.dark-mode .chessboard-63f37 {
     padding: 12px 16px;
     border-bottom: 1px solid #e2e8f0;
 }
-.help-modal-header h3 { margin: 0; }
+
+.help-modal-header h3 {
+    margin: 0;
+}
+
 .help-close {
     border: none;
     background: transparent;
@@ -1135,17 +1276,32 @@ body.dark-mode .chessboard-63f37 {
     cursor: pointer;
     color: #374151;
 }
-.help-modal-body { padding: 14px 16px 18px; }
-.help-text { white-space: pre-wrap; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; font-size: 0.95rem; line-height: 1.4; }
+
+.help-modal-body {
+    padding: 14px 16px 18px;
+}
+
+.help-text {
+    white-space: pre-wrap;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
 
 /* Dark mode modal */
 body.dark-mode .help-modal {
     background: #1f2937;
     color: #e2e8f0;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
 }
-body.dark-mode .help-modal-header { border-bottom-color: #2d3748; }
-body.dark-mode .help-close { color: #e2e8f0; }
+
+body.dark-mode .help-modal-header {
+    border-bottom-color: #2d3748;
+}
+
+body.dark-mode .help-close {
+    color: #e2e8f0;
+}
 
 /* Hide chess pieces by targeting the chessboard image pieces inserted by Chessboard.js */
 /* chessboard.js may render pieces as <img class="piece"> or as divs with background-image
@@ -1165,4 +1321,219 @@ body.dark-mode .help-close { color: #e2e8f0; }
 #chessboard img {
     -webkit-user-drag: none;
     user-drag: none;
+}
+
+/* ============================================
+   PRACTICE MODE STYLES
+   ============================================ */
+
+.clickable-title {
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.clickable-title:hover {
+    opacity: 0.8;
+}
+
+.practice-info {
+    width: 100%;
+    max-width: 600px;
+    margin: 20px auto;
+    text-align: center;
+}
+
+.target-square-display {
+    background: white;
+    border-radius: 15px;
+    padding: 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    font-size: 24px;
+    font-weight: bold;
+    color: #2d3748;
+}
+
+body.dark-mode .target-square-display {
+    background: #1f2937;
+    color: #f8fafc;
+}
+
+.target-square {
+    font-size: 48px;
+    color: #3182ce;
+    display: block;
+    margin-top: 10px;
+    letter-spacing: 2px;
+}
+
+body.dark-mode .target-square {
+    color: #60a5fa;
+}
+
+.practice-stats {
+    display: flex;
+    justify-content: space-around;
+    gap: 20px;
+}
+
+.practice-score,
+.practice-timer {
+    background: white;
+    border-radius: 12px;
+    padding: 15px 25px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    font-size: 20px;
+    font-weight: bold;
+    color: #2d3748;
+    flex: 1;
+}
+
+body.dark-mode .practice-score,
+body.dark-mode .practice-timer {
+    background: #1f2937;
+    color: #f8fafc;
+}
+
+.practice-timer {
+    color: #e53e3e;
+}
+
+body.dark-mode .practice-timer {
+    color: #f87171;
+}
+
+.practice-board-container {
+    width: 100%;
+    max-width: 600px;
+    margin: 20px auto;
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+body.dark-mode .practice-board-container {
+    background: #1f2937;
+}
+
+#practiceBoard {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+/* Red blink animation for incorrect squares */
+@keyframes blink-red {
+
+    0%,
+    100% {
+        background-color: transparent;
+    }
+
+    25%,
+    75% {
+        background-color: rgba(239, 68, 68, 0.7);
+    }
+
+    50% {
+        background-color: rgba(220, 38, 38, 0.9);
+    }
+}
+
+.square-error {
+    animation: blink-red 0.6s ease-in-out;
+}
+
+/* Practice completion modal */
+.practice-complete-modal {
+    background: white;
+    border-radius: 15px;
+    padding: 40px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    max-width: 500px;
+    margin: 40px auto;
+    text-align: center;
+}
+
+body.dark-mode .practice-complete-modal {
+    background: #1f2937;
+    color: #f8fafc;
+}
+
+.practice-complete-modal h2 {
+    margin-bottom: 30px;
+    color: #2d3748;
+    font-size: 32px;
+}
+
+body.dark-mode .practice-complete-modal h2 {
+    color: #f8fafc;
+}
+
+.completion-stats {
+    display: flex;
+    justify-content: space-around;
+    margin: 30px 0;
+    gap: 20px;
+}
+
+.stat-item {
+    flex: 1;
+    padding: 20px;
+    background: #f7fafc;
+    border-radius: 12px;
+}
+
+body.dark-mode .stat-item {
+    background: #0f172a;
+}
+
+.stat-value {
+    font-size: 36px;
+    font-weight: bold;
+    color: #3182ce;
+    margin-bottom: 8px;
+}
+
+body.dark-mode .stat-value {
+    color: #60a5fa;
+}
+
+.stat-label {
+    font-size: 14px;
+    color: #718096;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+body.dark-mode .stat-label {
+    color: #94a3b8;
+}
+
+.completion-actions {
+    display: flex;
+    gap: 15px;
+    margin-top: 30px;
+}
+
+.completion-actions .start-button,
+.completion-actions .control-button {
+    flex: 1;
+}
+
+.timer-slider {
+    width: 100%;
+    margin: 10px 0;
+}
+
+.timer-display {
+    text-align: center;
+    font-weight: bold;
+    color: #3182ce;
+    margin-top: 5px;
+}
+
+body.dark-mode .timer-display {
+    color: #60a5fa;
 }
